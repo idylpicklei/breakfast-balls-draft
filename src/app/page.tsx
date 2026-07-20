@@ -3,14 +3,18 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api-client";
-import type { Tournament } from "@/lib/db/types";
+import type { AuthUser, Tournament } from "@/lib/db/types";
 
 export default function HomePage() {
+  const [me, setMe] = useState<AuthUser | null>(null);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    apiFetch<AuthUser>("/api/me")
+      .then(setMe)
+      .catch(() => undefined);
     apiFetch<{ tournaments: Tournament[] }>("/api/tournaments")
       .then((data) => setTournaments(data.tournaments))
       .catch((err: Error) => setError(err.message))
@@ -33,12 +37,14 @@ export default function HomePage() {
           <h2 className="font-[family-name:var(--font-display)] text-2xl text-[var(--ink)]">
             Tournaments
           </h2>
-          <Link
-            href="/admin"
-            className="bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--fairway)]"
-          >
-            New tournament
-          </Link>
+          {me?.is_admin && (
+            <Link
+              href="/admin"
+              className="bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--fairway)]"
+            >
+              New tournament
+            </Link>
+          )}
         </div>
 
         {loading && <p className="text-[var(--muted)]">Loading…</p>}
@@ -49,7 +55,11 @@ export default function HomePage() {
         )}
 
         {!loading && !error && tournaments.length === 0 && (
-          <p className="text-[var(--muted)]">No tournaments yet. Create one in Admin.</p>
+          <p className="text-[var(--muted)]">
+            {me?.is_admin
+              ? "No tournaments yet. Create one in Admin."
+              : "No tournaments yet."}
+          </p>
         )}
 
         <ul className="divide-y divide-[var(--line)] border-y border-[var(--line)] bg-[var(--panel)]/70">

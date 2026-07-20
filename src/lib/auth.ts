@@ -36,9 +36,9 @@ async function loadUserByUsername(username: string): Promise<(User & { password_
   const db = await getDb();
   return db
     .prepare(
-      "SELECT id, name, is_admin, username, password_hash FROM users WHERE username = ?",
+      "SELECT id, name, is_admin, username, password_hash FROM users WHERE LOWER(username) = LOWER(?)",
     )
-    .bind(username)
+    .bind(username.trim())
     .first<User & { password_hash: string }>();
 }
 
