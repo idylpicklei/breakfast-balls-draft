@@ -73,12 +73,41 @@ function formatUpdated(iso: string | null) {
   return new Date(iso).toLocaleString();
 }
 
+function buildScoreboardClipboardText(data: LeaderboardResponse): string {
+  const { tournament, leaderboard } = data;
+  const lines: string[] = [`${tournament.name}`, ""];
+
+  for (const team of leaderboard.teams) {
+    lines.push(`${team.user_name} — Best 4: ${formatStandingTotal(team)}`);
+    for (const p of team.players) {
+      lines.push(`  ${p.player_name}: ${formatPlayerScore(p)}`);
+    }
+    lines.push("");
+  }
+
+  if (leaderboard.partnerships.length > 0) {
+    const sides = [...leaderboard.partnerships].sort(
+      (a, b) => a.sort_order - b.sort_order,
+    );
+    lines.push(sides.map((s) => s.team_name).join(" vs "));
+    for (const side of sides) {
+      lines.push(
+        `${side.team_name} (${side.member_names.join(", ")}): ${formatStandingTotal(side)}`,
+      );
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n").trimEnd();
+}
+
 export default function ScoreboardPage() {
   const params = useParams<{ id: string }>();
   const [me, setMe] = useState<AuthUser | null>(null);
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     const payload = await apiFetch<LeaderboardResponse>(
@@ -121,6 +150,25 @@ export default function ScoreboardPage() {
     } finally {
       setRefreshing(false);
     }
+  }
+
+  async function copyScoreboard() {
+    if (!data) return;
+    const text = buildScoreboardClipboardText(data);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
   }
 
   if (!data) {
@@ -333,6 +381,17 @@ export default function ScoreboardPage() {
             </tbody>
           </table>
         </div>
+        {me?.is_admin && (
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={copyScoreboard}
+              className="text-xs text-[var(--muted)] underline-offset-2 hover:text-[var(--ink)] hover:underline"
+            >
+              {copied ? "Copied!" : "Copy scoreboard"}
+            </button>
+          </div>
+        )}
       </section>
     </div>
   );
