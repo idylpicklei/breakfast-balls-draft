@@ -78,10 +78,11 @@ function buildScoreboardClipboardText(data: LeaderboardResponse): string {
   const lines: string[] = [`${tournament.name}`, ""];
 
   for (const team of leaderboard.teams) {
-    lines.push(`${team.user_name} — Best 4: ${formatStandingTotal(team)}`);
+    lines.push(team.user_name);
     for (const p of team.players) {
       lines.push(`  ${p.player_name}: ${formatPlayerScore(p)}`);
     }
+    lines.push(`Best Foursome = ${formatStandingTotal(team)}`);
     lines.push("");
   }
 
@@ -89,13 +90,10 @@ function buildScoreboardClipboardText(data: LeaderboardResponse): string {
     const sides = [...leaderboard.partnerships].sort(
       (a, b) => a.sort_order - b.sort_order,
     );
-    lines.push(sides.map((s) => s.team_name).join(" vs "));
-    for (const side of sides) {
-      lines.push(
-        `${side.team_name} (${side.member_names.join(", ")}): ${formatStandingTotal(side)}`,
-      );
-    }
     lines.push("");
+    for (const side of sides) {
+      lines.push(`${side.team_name} = ${formatStandingTotal(side)}`);
+    }
   }
 
   return lines.join("\n").trimEnd();
