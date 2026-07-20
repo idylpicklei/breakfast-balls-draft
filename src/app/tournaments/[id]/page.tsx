@@ -203,18 +203,6 @@ export default function ScoreboardPage() {
               )}
             </div>
           </div>
-
-          <div className="space-y-3">
-            <h2 className="font-[family-name:var(--font-display)] text-2xl">Custom prize</h2>
-            <div className="border border-[var(--line)] bg-[var(--sand)]/40 px-4 py-4">
-              <p className="text-sm uppercase tracking-wider text-[var(--muted)]">
-                Admin rule (display only)
-              </p>
-              <p className="mt-2 text-lg font-medium text-[var(--ink)]">
-                {leaderboard.custom_prize_rule}
-              </p>
-            </div>
-          </div>
         </div>
       </section>
 

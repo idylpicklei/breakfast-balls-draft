@@ -28,7 +28,6 @@ export interface BestSinglePlayer {
 
 export interface LeaderboardPayload {
   tournament_id: string;
-  custom_prize_rule: string;
   round_status: string | null;
   teams: TeamStanding[];
   best_single_player: BestSinglePlayer | null;
@@ -38,7 +37,6 @@ export function buildLeaderboard(
   rosters: Roster[],
   users: User[],
   rows: NormalizedLeaderboardRow[],
-  customPrizeRule: string,
   tournamentId: string,
   roundStatus: string | null = null,
 ): LeaderboardPayload {
@@ -115,7 +113,6 @@ export function buildLeaderboard(
 
   return {
     tournament_id: tournamentId,
-    custom_prize_rule: customPrizeRule,
     round_status: roundStatus,
     teams,
     best_single_player: bestSingle,

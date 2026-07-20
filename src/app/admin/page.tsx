@@ -18,7 +18,6 @@ export default function AdminPage() {
   const [cached, setCached] = useState<GolfTournament[]>([]);
   const [selectedTournId, setSelectedTournId] = useState("");
   const [name, setName] = useState("");
-  const [prizeRule, setPrizeRule] = useState("Most combined birdies");
   const [order, setOrder] = useState(DEFAULT_ORDER.join(", "));
 
   async function loadCachedSchedule(scheduleYear: string) {
@@ -73,7 +72,6 @@ export default function AdminPage() {
           name: name || selected?.name,
           external_tournament_id: selectedTournId,
           year,
-          custom_prize_rule: prizeRule,
           draft_order,
           sync_field: true,
         }),
@@ -161,16 +159,6 @@ export default function AdminPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Breakfast Balls Week 12"
-          />
-        </label>
-
-        <label className="block space-y-1 text-sm">
-          <span className="font-medium">Custom prize rule (display only)</span>
-          <input
-            required
-            className="w-full border border-[var(--line)] bg-white px-3 py-2"
-            value={prizeRule}
-            onChange={(e) => setPrizeRule(e.target.value)}
           />
         </label>
 

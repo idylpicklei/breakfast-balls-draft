@@ -12,7 +12,6 @@ export interface Tournament {
   year: string;
   name: string;
   status: TournamentStatus;
-  custom_prize_rule: string;
   created_at: string;
 }
 

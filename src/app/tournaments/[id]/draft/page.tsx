@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, getDevUserId } from "@/lib/api-client";
 import type { AuthUser, DraftOrder, DraftSession, Roster, Tournament } from "@/lib/db/types";
 
@@ -23,6 +23,9 @@ interface DraftPayload {
   picks_remaining: number;
 }
 
+const LIVE_POLL_MS = 2000;
+const PENDING_POLL_MS = 4000;
+
 export default function DraftPage() {
   const params = useParams<{ id: string }>();
   const tournamentId = params.id;
@@ -32,19 +35,99 @@ export default function DraftPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
+  const [turnFlash, setTurnFlash] = useState(false);
 
-  const load = useCallback(async () => {
-    const [user, data] = await Promise.all([
-      apiFetch<AuthUser>("/api/me"),
-      apiFetch<DraftPayload>(`/api/draft/${tournamentId}`),
-    ]);
-    setMe(user);
+  const prevActiveRef = useRef<string | null>(null);
+  const prevPickCountRef = useRef(0);
+
+  const refreshDraft = useCallback(async () => {
+    const data = await apiFetch<DraftPayload>(`/api/draft/${tournamentId}`);
     setDraft(data);
+    return data;
   }, [tournamentId]);
 
   useEffect(() => {
-    load().catch((err: Error) => setError(err.message));
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const [user, data] = await Promise.all([
+          apiFetch<AuthUser>("/api/me"),
+          apiFetch<DraftPayload>(`/api/draft/${tournamentId}`),
+        ]);
+        if (cancelled) return;
+        setMe(user);
+        setDraft(data);
+        prevActiveRef.current = data.active_user_id;
+        prevPickCountRef.current = data.rosters.length;
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tournamentId]);
+
+  const draftStatus = draft?.draft_session.draft_status ?? null;
+
+  // Poll while the draft room is open so other seats see picks / turn changes.
+  useEffect(() => {
+    if (!draftStatus || draftStatus === "FINISHED") return;
+
+    const intervalMs = draftStatus === "LIVE" ? LIVE_POLL_MS : PENDING_POLL_MS;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let stopped = false;
+
+    const schedule = () => {
+      if (stopped) return;
+      timer = setTimeout(() => {
+        void tick();
+      }, intervalMs);
+    };
+
+    const tick = async () => {
+      if (stopped) return;
+      if (document.visibilityState === "hidden") {
+        schedule();
+        return;
+      }
+      try {
+        const data = await refreshDraft();
+        const myId = me?.id ?? getDevUserId();
+        const pickCount = data.rosters.length;
+
+        if (pickCount > prevPickCountRef.current) {
+          setError(null);
+        }
+        prevPickCountRef.current = pickCount;
+
+        if (
+          data.draft_session.draft_status === "LIVE" &&
+          data.active_user_id === myId &&
+          prevActiveRef.current !== myId
+        ) {
+          setTurnFlash(true);
+          window.setTimeout(() => setTurnFlash(false), 2500);
+        }
+        prevActiveRef.current = data.active_user_id;
+      } catch {
+        // Keep last good board; next tick retries.
+      }
+      schedule();
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    schedule();
+
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [draftStatus, me?.id, refreshDraft]);
 
   const isMyTurn =
     !!draft &&
@@ -65,7 +148,7 @@ export default function DraftPage() {
     setError(null);
     try {
       await apiFetch(`/api/draft/${tournamentId}/start`, { method: "POST" });
-      await load();
+      await refreshDraft();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start");
     } finally {
@@ -82,7 +165,7 @@ export default function DraftPage() {
         body: JSON.stringify({ tournamentId, playerId, playerName }),
       });
       setQuery("");
-      await load();
+      await refreshDraft();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Pick failed");
     } finally {
@@ -99,6 +182,7 @@ export default function DraftPage() {
     draft_order.find((d) => d.user_id === active_user_id)?.user_name ?? active_user_id;
   const showField =
     draft_session.draft_status === "PENDING" || draft_session.draft_status === "LIVE";
+  const liveUpdating = draft_session.draft_status !== "FINISHED";
 
   return (
     <div className="space-y-8">
@@ -112,7 +196,22 @@ export default function DraftPage() {
             Status: {draft_session.draft_status} · Pick{" "}
             {Math.min(draft_session.current_pick, draft.total_picks)} / {draft.total_picks}
             {active_user_id ? ` · On the clock: ${activeName}` : null}
+            {liveUpdating ? (
+              <span className="ml-2 inline-flex items-center gap-1 text-xs text-[var(--accent)]">
+                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
+                Live
+              </span>
+            ) : null}
           </p>
+          {isMyTurn && (
+            <p
+              className={`mt-2 text-sm font-semibold text-[var(--accent)] ${
+                turnFlash ? "animate-pulse" : ""
+              }`}
+            >
+              You’re on the clock — pick a player below.
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           {draft_session.draft_status === "PENDING" && me?.is_admin && (
@@ -139,7 +238,7 @@ export default function DraftPage() {
         {draft_order.map((slot) => (
           <div
             key={slot.user_id}
-            className={`border px-3 py-3 ${
+            className={`border px-3 py-3 transition-colors ${
               slot.user_id === active_user_id
                 ? "border-[var(--accent)] bg-[var(--accent-soft)]"
                 : "border-[var(--line)] bg-[var(--panel)]/70"
@@ -147,6 +246,7 @@ export default function DraftPage() {
           >
             <p className="text-xs uppercase tracking-wider text-[var(--muted)]">
               Slot {slot.pick_position}
+              {slot.user_id === active_user_id ? " · On clock" : ""}
             </p>
             <p className="font-semibold">{slot.user_name}</p>
             <ul className="mt-2 space-y-1 text-sm text-[var(--muted)]">

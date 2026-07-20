@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const db = await getDb();
     const { results } = await db
       .prepare(
-        `SELECT id, external_tournament_id, year, name, status, custom_prize_rule, created_at
+        `SELECT id, external_tournament_id, year, name, status, created_at
          FROM tournaments ORDER BY created_at DESC`,
       )
       .all<Tournament>();
@@ -24,7 +24,6 @@ interface CreateBody {
   external_tournament_id: string;
   year: string;
   name: string;
-  custom_prize_rule: string;
   draft_order?: string[];
   sync_field?: boolean;
 }
@@ -34,13 +33,8 @@ export async function POST(request: Request) {
     await requireAdmin(request);
     const body = await readJson<CreateBody>(request);
 
-    if (
-      !body.external_tournament_id?.trim() ||
-      !body.year?.trim() ||
-      !body.name?.trim() ||
-      !body.custom_prize_rule?.trim()
-    ) {
-      return error("external_tournament_id, year, name, and custom_prize_rule are required");
+    if (!body.external_tournament_id?.trim() || !body.year?.trim() || !body.name?.trim()) {
+      return error("external_tournament_id, year, and name are required");
     }
 
     const draftOrder = body.draft_order?.length
@@ -82,10 +76,10 @@ export async function POST(request: Request) {
     const statements = [
       db
         .prepare(
-          `INSERT INTO tournaments (id, external_tournament_id, year, name, status, custom_prize_rule)
-           VALUES (?, ?, ?, ?, 'SCHEDULED', ?)`,
+          `INSERT INTO tournaments (id, external_tournament_id, year, name, status)
+           VALUES (?, ?, ?, ?, 'SCHEDULED')`,
         )
-        .bind(id, tournId, year, body.name.trim(), body.custom_prize_rule.trim()),
+        .bind(id, tournId, year, body.name.trim()),
       db
         .prepare(
           `INSERT INTO draft_sessions (tournament_id, current_pick, draft_status)
@@ -106,7 +100,7 @@ export async function POST(request: Request) {
 
     const tournament = await db
       .prepare(
-        `SELECT id, external_tournament_id, year, name, status, custom_prize_rule, created_at
+        `SELECT id, external_tournament_id, year, name, status, created_at
          FROM tournaments WHERE id = ?`,
       )
       .bind(id)

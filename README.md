@@ -114,4 +114,3 @@ Or push and let Workers Builds run `npx opennextjs-cloudflare build` + `npx wran
 
 - **Best 4 of 6:** lowest combined `total` from each team’s best 4 drafted players
 - **Best single player:** lowest `total` among all 24 drafted players
-- **Custom prize rule:** display only
