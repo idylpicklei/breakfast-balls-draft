@@ -49,7 +49,8 @@ For production Access, update `users.id` values to each member’s Access email 
 | Script | Purpose |
 |--------|---------|
 | `npm run dev` | Next.js local dev (OpenNext Cloudflare bindings) |
-| `npm run build` | OpenNext Cloudflare build (creates `.open-next/`) |
+| `npm run build` | Next.js build only (required name — OpenNext calls this) |
+| `npm run cf:build` | OpenNext Cloudflare build (creates `.open-next/`) |
 | `npm run db:migrate:local` | Apply D1 migrations locally |
 | `npm run db:migrate:remote` | Apply D1 migrations to remote DB |
 | `npm run preview` | OpenNext build + Wrangler preview |
@@ -58,16 +59,16 @@ For production Access, update `users.id` values to each member’s Access email 
 
 ### Cloudflare Workers Builds (Git deploy)
 
-Do **not** deploy with bare `wrangler deploy` unless `.open-next` already exists.
+`npm run build` **must** stay as `next build`. OpenNext invokes that script; pointing it at `opennextjs-cloudflare build` causes an infinite loop and CI timeout.
 
 In the Worker → **Settings → Build**:
 
 | Setting | Value |
 |---------|--------|
-| Build command | `npm run build` |
+| Build command | `npx opennextjs-cloudflare build` |
 | Deploy command | `npx wrangler deploy` |
 
-Or set Deploy command to `npm run deploy` and leave Build command empty (that script builds then deploys).
+Or leave Build empty and set Deploy to `npm run deploy`.
 
 Local API key for bindings: use `.dev.vars` (not only `.env`):
 
