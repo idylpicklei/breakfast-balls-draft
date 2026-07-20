@@ -9,8 +9,15 @@
     "binding": "ASSETS"
   },
   "vars": {
-    "ALLOW_HEADER_AUTH": "true"
+    "ALLOW_HEADER_AUTH": "true",
+    "NEXT_PRIVATE_MINIMAL_MODE": "1"
   },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "breakfast-balls-draft"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

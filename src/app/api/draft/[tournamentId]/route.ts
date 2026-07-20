@@ -1,6 +1,7 @@
 import { requireAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db/client";
-import type { DraftOrder, DraftSession, Roster, Tournament } from "@/lib/db/types";
+import type { DraftOrder, DraftSession, GolfPlayer, Roster, Tournament } from "@/lib/db/types";
+import { golfPlayerName } from "@/lib/db/types";
 import { getUserIdAtPick } from "@/lib/snake";
 import { TOTAL_PICKS } from "@/lib/status";
 import { error, handleRouteError, json } from "@/lib/http";
@@ -54,6 +55,20 @@ export async function GET(request: Request, { params }: Params) {
       .bind(tournamentId)
       .all<Roster>();
 
+    const { results: fieldPlayers } = await db
+      .prepare(
+        `SELECT p.id, p.first_name, p.last_name, p.status
+         FROM golf_players p
+         JOIN golf_tournament_field f ON f.player_id = p.id
+         WHERE f.tournament_id = ?
+           AND p.id NOT IN (
+             SELECT player_id FROM rosters WHERE tournament_id = ?
+           )
+         ORDER BY p.last_name ASC, p.first_name ASC`,
+      )
+      .bind(tournament.external_tournament_id, tournamentId)
+      .all<GolfPlayer>();
+
     const activeUserId =
       session.draft_status === "LIVE" && session.current_pick <= TOTAL_PICKS
         ? getUserIdAtPick(session.current_pick, order)
@@ -64,6 +79,11 @@ export async function GET(request: Request, { params }: Params) {
       draft_session: session,
       draft_order: orderRows ?? [],
       rosters: rosters ?? [],
+      available_players: (fieldPlayers ?? []).map((p) => ({
+        id: p.id,
+        name: golfPlayerName(p),
+        status: p.status,
+      })),
       active_user_id: activeUserId,
       total_picks: TOTAL_PICKS,
       picks_remaining: Math.max(0, TOTAL_PICKS - (session.current_pick - 1)),

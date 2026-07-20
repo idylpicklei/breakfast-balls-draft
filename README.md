@@ -89,11 +89,18 @@ npm run db:migrate:remote
 
 ## Remote deploy
 
+OpenNext is **not reliable when built on Windows** (production 500s / `ComponentMod.handler is not a function`). Build in WSL or rely on Cloudflare Workers Builds (Linux), then deploy:
+
 ```bash
+# From WSL (recommended on Windows)
 npm run db:migrate:remote
-npx wrangler secret put RAPID_API
-npm run deploy
+npx wrangler secret put RAPID_API   # once
+npx opennextjs-cloudflare build
+# deploy with authenticated wrangler (Windows host is fine if .open-next already exists):
+npx wrangler deploy --keep-vars
 ```
+
+Or push and let Workers Builds run `npx opennextjs-cloudflare build` + `npx wrangler deploy` on Linux.
 
 ## Admin workflow
 

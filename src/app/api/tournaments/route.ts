@@ -68,10 +68,12 @@ export async function POST(request: Request) {
     }
 
     if (body.sync_field !== false) {
-      try {
-        await syncTournamentField(tournId, year);
-      } catch (err) {
-        console.error("[create tournament] field sync failed:", err);
+      const field = await syncTournamentField(tournId, year);
+      if (field.playersUpserted === 0) {
+        return error(
+          "Field sync returned 0 players for this tournament — check RAPID_API and try again",
+          502,
+        );
       }
     }
 

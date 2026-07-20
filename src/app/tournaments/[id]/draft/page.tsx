@@ -2,23 +2,25 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch, getDevUserId } from "@/lib/api-client";
 import type { AuthUser, DraftOrder, DraftSession, Roster, Tournament } from "@/lib/db/types";
+
+interface PlayerHit {
+  id: string;
+  name: string;
+  status?: string | null;
+}
 
 interface DraftPayload {
   tournament: Tournament;
   draft_session: DraftSession;
   draft_order: (DraftOrder & { user_name: string })[];
   rosters: Roster[];
+  available_players: PlayerHit[];
   active_user_id: string | null;
   total_picks: number;
   picks_remaining: number;
-}
-
-interface PlayerHit {
-  id: string;
-  name: string;
 }
 
 export default function DraftPage() {
@@ -29,9 +31,6 @@ export default function DraftPage() {
   const [draft, setDraft] = useState<DraftPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [hits, setHits] = useState<PlayerHit[]>([]);
-  const [manualId, setManualId] = useState("");
-  const [manualName, setManualName] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -47,15 +46,19 @@ export default function DraftPage() {
     load().catch((err: Error) => setError(err.message));
   }, [load]);
 
-  const draftedIds = useMemo(
-    () => new Set(draft?.rosters.map((r) => r.player_id) ?? []),
-    [draft],
-  );
-
   const isMyTurn =
     !!draft &&
     draft.draft_session.draft_status === "LIVE" &&
     draft.active_user_id === (me?.id ?? getDevUserId());
+
+  const filteredPlayers = useMemo(() => {
+    const players = draft?.available_players ?? [];
+    const q = query.trim().toLowerCase();
+    if (!q) return players;
+    return players.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q),
+    );
+  }, [draft?.available_players, query]);
 
   async function startDraft() {
     setBusy(true);
@@ -78,26 +81,12 @@ export default function DraftPage() {
         method: "POST",
         body: JSON.stringify({ tournamentId, playerId, playerName }),
       });
-      setHits([]);
       setQuery("");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Pick failed");
     } finally {
       setBusy(false);
-    }
-  }
-
-  async function onSearch(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      const data = await apiFetch<{ players: PlayerHit[] }>(
-        `/api/players/search?q=${encodeURIComponent(query)}&tournId=${encodeURIComponent(draft!.tournament.external_tournament_id)}&year=${encodeURIComponent(draft!.tournament.year)}`,
-      );
-      setHits(data.players.filter((p) => !draftedIds.has(p.id)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Search failed");
     }
   }
 
@@ -108,6 +97,8 @@ export default function DraftPage() {
   const { tournament, draft_session, draft_order, rosters, active_user_id } = draft;
   const activeName =
     draft_order.find((d) => d.user_id === active_user_id)?.user_name ?? active_user_id;
+  const showField =
+    draft_session.draft_status === "PENDING" || draft_session.draft_status === "LIVE";
 
   return (
     <div className="space-y-8">
@@ -118,8 +109,8 @@ export default function DraftPage() {
             {tournament.name}
           </h1>
           <p className="mt-2 text-[var(--muted)]">
-            Status: {draft_session.draft_status} · Pick {Math.min(draft_session.current_pick, draft.total_picks)} /{" "}
-            {draft.total_picks}
+            Status: {draft_session.draft_status} · Pick{" "}
+            {Math.min(draft_session.current_pick, draft.total_picks)} / {draft.total_picks}
             {active_user_id ? ` · On the clock: ${activeName}` : null}
           </p>
         </div>
@@ -171,66 +162,62 @@ export default function DraftPage() {
         ))}
       </section>
 
-      {isMyTurn && (
+      {showField && (
         <section className="space-y-4 border border-[var(--line)] bg-[var(--panel)]/80 p-5">
-          <h2 className="font-[family-name:var(--font-display)] text-2xl">Your pick</h2>
-          <form onSubmit={onSearch} className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-[family-name:var(--font-display)] text-2xl">
+                Available players
+              </h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                {draft.available_players.length} undrafted
+                {query.trim() ? ` · ${filteredPlayers.length} match filter` : null}
+                {isMyTurn ? " · Your pick — draft from the list" : null}
+              </p>
+            </div>
             <input
-              className="min-w-[220px] flex-1 border border-[var(--line)] px-3 py-2"
-              placeholder="Search PGA players"
+              className="min-w-[220px] flex-1 border border-[var(--line)] bg-white px-3 py-2 md:max-w-xs"
+              placeholder="Filter by name…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
-            <button type="submit" className="bg-[var(--ink)] px-4 py-2 text-sm text-white">
-              Search
-            </button>
-          </form>
+          </div>
 
-          {hits.length > 0 && (
-            <ul className="divide-y divide-[var(--line)] border border-[var(--line)]">
-              {hits.map((p) => (
-                <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
+          {draft.available_players.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">
+              No players in the cached field. Ask an admin to re-create the tournament (or sync the
+              field) so the PGA field is loaded into D1.
+            </p>
+          ) : filteredPlayers.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">No players match “{query.trim()}”.</p>
+          ) : (
+            <ul className="max-h-[28rem] divide-y divide-[var(--line)] overflow-y-auto border border-[var(--line)] bg-white/60">
+              {filteredPlayers.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                >
                   <span>
-                    {p.name} <span className="text-xs text-[var(--muted)]">#{p.id}</span>
+                    {p.name}
+                    {p.status ? (
+                      <span className="ml-2 text-xs uppercase tracking-wide text-[var(--muted)]">
+                        {p.status}
+                      </span>
+                    ) : null}
                   </span>
-                  <button
-                    disabled={busy}
-                    onClick={() => makePick(p.id, p.name)}
-                    className="bg-[var(--accent)] px-3 py-1 text-sm text-white disabled:opacity-50"
-                  >
-                    Draft
-                  </button>
+                  {isMyTurn ? (
+                    <button
+                      disabled={busy}
+                      onClick={() => makePick(p.id, p.name)}
+                      className="shrink-0 bg-[var(--accent)] px-3 py-1 text-sm text-white disabled:opacity-50"
+                    >
+                      Draft
+                    </button>
+                  ) : null}
                 </li>
               ))}
             </ul>
           )}
-
-          <div className="space-y-2 border-t border-[var(--line)] pt-4">
-            <p className="text-sm text-[var(--muted)]">
-              Manual pick (search cached PGA field first)
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <input
-                className="w-32 border border-[var(--line)] px-3 py-2"
-                placeholder="Player ID"
-                value={manualId}
-                onChange={(e) => setManualId(e.target.value)}
-              />
-              <input
-                className="min-w-[180px] flex-1 border border-[var(--line)] px-3 py-2"
-                placeholder="Player name"
-                value={manualName}
-                onChange={(e) => setManualName(e.target.value)}
-              />
-              <button
-                disabled={busy || !manualId || !manualName}
-                onClick={() => makePick(manualId, manualName)}
-                className="bg-[var(--fairway)] px-4 py-2 text-sm text-white disabled:opacity-50"
-              >
-                Submit pick
-              </button>
-            </div>
-          </div>
         </section>
       )}
 
