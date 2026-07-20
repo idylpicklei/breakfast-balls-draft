@@ -49,11 +49,31 @@ For production Access, update `users.id` values to each member’s Access email 
 | Script | Purpose |
 |--------|---------|
 | `npm run dev` | Next.js local dev (OpenNext Cloudflare bindings) |
+| `npm run build` | OpenNext Cloudflare build (creates `.open-next/`) |
 | `npm run db:migrate:local` | Apply D1 migrations locally |
 | `npm run db:migrate:remote` | Apply D1 migrations to remote DB |
 | `npm run preview` | OpenNext build + Wrangler preview |
 | `npm run deploy` | OpenNext build + deploy |
 | `npm run cf-typegen` | Regenerate Cloudflare `Env` types |
+
+### Cloudflare Workers Builds (Git deploy)
+
+Do **not** deploy with bare `wrangler deploy` unless `.open-next` already exists.
+
+In the Worker → **Settings → Build**:
+
+| Setting | Value |
+|---------|--------|
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+
+Or set Deploy command to `npm run deploy` and leave Build command empty (that script builds then deploys).
+
+Local API key for bindings: use `.dev.vars` (not only `.env`):
+
+```
+BALLDONTLIE_API_KEY=your_key_here
+```
 
 ## Remote D1
 

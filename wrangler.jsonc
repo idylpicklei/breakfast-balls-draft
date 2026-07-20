@@ -12,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "breakfast-balls",
-      "database_id": "00000000-0000-0000-0000-000000000001",
+      "database_id": "373dfcfc-4c2f-4020-9f85-daedba3c3e39",
       "migrations_dir": "migrations"
     }
   ]
