@@ -9,7 +9,6 @@
     "binding": "ASSETS"
   },
   "vars": {
-    "ALLOW_HEADER_AUTH": "true",
     "NEXT_PRIVATE_MINIMAL_MODE": "1"
   },
   "services": [

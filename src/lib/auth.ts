@@ -1,5 +1,9 @@
 import { getDb, getSecret } from "@/lib/db/client";
 import type { AuthUser, User } from "@/lib/db/types";
+import {
+  parseSessionCookie,
+  verifySessionToken,
+} from "@/lib/session";
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -28,17 +32,38 @@ async function loadUser(id: string): Promise<AuthUser | null> {
   return { id: row.id, name: row.name, is_admin: asBool(row.is_admin) };
 }
 
+async function loadUserByUsername(username: string): Promise<(User & { password_hash: string }) | null> {
+  const db = await getDb();
+  return db
+    .prepare(
+      "SELECT id, name, is_admin, username, password_hash FROM users WHERE username = ?",
+    )
+    .bind(username)
+    .first<User & { password_hash: string }>();
+}
+
 async function headerAuthAllowed(): Promise<boolean> {
   const flag = await getSecret("ALLOW_HEADER_AUTH");
   if (flag === "true") return true;
   return process.env.NODE_ENV !== "production";
 }
 
+async function sessionUserId(request: Request): Promise<string | null> {
+  const token = parseSessionCookie(request.headers.get("cookie"));
+  if (!token) return null;
+  return verifySessionToken(token);
+}
+
 /**
- * Resolve the current user from Cloudflare Access headers.
- * With ALLOW_HEADER_AUTH=true (or non-production), also accept x-dev-user-id.
+ * Resolve the current user from session cookie, Cloudflare Access, or dev header.
  */
 export async function getAuthUser(request: Request): Promise<AuthUser | null> {
+  const sessionId = await sessionUserId(request);
+  if (sessionId) {
+    const user = await loadUser(sessionId);
+    if (user) return user;
+  }
+
   const email = request.headers.get("cf-access-authenticated-user-email");
   const assertion = request.headers.get("cf-access-jwt-assertion");
   const headerUserId = request.headers.get("x-dev-user-id");
@@ -69,7 +94,6 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
   const existing = await loadUser(identity);
   if (existing) return existing;
 
-  // Auto-provision non-seed Access identities as non-admin players
   const db = await getDb();
   await db
     .prepare("INSERT OR IGNORE INTO users (id, name, is_admin) VALUES (?, ?, 0)")
@@ -77,6 +101,24 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
     .run();
 
   return loadUser(identity);
+}
+
+export async function authenticateUsernamePassword(
+  username: string,
+  password: string,
+): Promise<AuthUser | null> {
+  const row = await loadUserByUsername(username.trim());
+  if (!row?.password_hash) return null;
+
+  const { verifyPassword } = await import("@/lib/password");
+  const ok = await verifyPassword(password, row.password_hash);
+  if (!ok) return null;
+
+  return {
+    id: row.id,
+    name: row.name,
+    is_admin: asBool(row.is_admin),
+  };
 }
 
 export async function requireAuth(request: Request): Promise<AuthUser> {

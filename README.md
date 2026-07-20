@@ -26,14 +26,23 @@ npm run db:migrate:local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Use **Playing as** in the header (`admin` can sync schedule and create tournaments).
+Open [http://localhost:3000](http://localhost:3000) and sign in at `/login`.
+
+### League logins
+
+| Username | Password | Admin |
+|----------|----------|-------|
+| `Dylpickle` | `balls2026` | yes |
+| `MinJungKyu` | `mjk2026` | no |
+| `PaulHawk` | `hawk2026` | no |
+| `PigTank` | `pig2026` | no |
 
 ### Secrets / env
 
 | Name | Where | Purpose |
 |------|--------|---------|
-| `RAPID_API` | Worker **runtime** Secret + local `.env` | RapidAPI key for schedule/field/leaderboard |
-| Access JWT / email headers | Cloudflare Access | Production identity → `users.id` |
+| `RAPID_API` | Worker **runtime** Secret + local `.dev.vars` | RapidAPI key for schedule/field/leaderboard |
+| `SESSION_SECRET` | Worker **runtime** Secret + local `.dev.vars` | Signs login session cookies |
 
 ### Setting `RAPID_API` on Cloudflare (common “undefined” fix)
 
@@ -49,12 +58,14 @@ Local Next.js: put the key in `.env`:
 RAPID_API=your_rapidapi_key_here
 ```
 
-### Seed users
+### League users
 
-| id | name | admin |
-|----|------|-------|
-| `admin` | Admin | yes |
-| `player-1` … `player-4` | Player One–Four | no |
+| Username | Role |
+|----------|------|
+| `Dylpickle` | Admin + drafter |
+| `MinJungKyu` | Player |
+| `PaulHawk` | Player |
+| `PigTank` | Player |
 
 ## Scripts
 
@@ -83,9 +94,9 @@ Workers Builds does **not** apply D1 migrations:
 npm run db:migrate:remote
 ```
 
-### Auth (production)
+### Auth
 
-`ALLOW_HEADER_AUTH=true` in `wrangler.jsonc` enables the “Playing as” header until Cloudflare Access is configured.
+Username/password login with HttpOnly session cookies. Non-admins cannot access `/admin` or admin APIs. Set `SESSION_SECRET` via `npx wrangler secret put SESSION_SECRET` before deploying.
 
 ## Remote deploy
 
@@ -95,6 +106,7 @@ OpenNext is **not reliable when built on Windows** (production 500s / `Component
 # From WSL (recommended on Windows)
 npm run db:migrate:remote
 npx wrangler secret put RAPID_API   # once
+npx wrangler secret put SESSION_SECRET   # once
 npx opennextjs-cloudflare build
 # deploy with authenticated wrangler (Windows host is fine if .open-next already exists):
 npx wrangler deploy --keep-vars

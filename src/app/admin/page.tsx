@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
 import type { AuthUser, GolfTournament, Tournament } from "@/lib/db/types";
 
-const DEFAULT_ORDER = ["player-1", "player-2", "player-3", "player-4"];
+const DEFAULT_ORDER = ["MinJungKyu", "PaulHawk", "PigTank", "Dylpickle"];
 
 export default function AdminPage() {
   const router = useRouter();
@@ -97,7 +97,7 @@ export default function AdminPage() {
 
       {me && !me.is_admin && (
         <p className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Signed in as {me.name}, but not an admin. Switch to <strong>admin</strong>.
+          Signed in as {me.name}. Admin tools are only available to Dylpickle.
         </p>
       )}
 

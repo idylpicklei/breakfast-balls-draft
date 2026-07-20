@@ -22,11 +22,10 @@ interface LeaderboardResponse {
 }
 
 const USER_COLORS: Record<string, string> = {
-  "player-1": "bg-sky-100 border-sky-300",
-  "player-2": "bg-emerald-100 border-emerald-300",
-  "player-3": "bg-amber-100 border-amber-300",
-  "player-4": "bg-rose-100 border-rose-300",
-  admin: "bg-violet-100 border-violet-300",
+  MinJungKyu: "bg-sky-100 border-sky-300",
+  PaulHawk: "bg-emerald-100 border-emerald-300",
+  PigTank: "bg-amber-100 border-amber-300",
+  Dylpickle: "bg-rose-100 border-rose-300",
 };
 
 function formatScore(score: number | null | undefined) {

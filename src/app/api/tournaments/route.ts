@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     const draftOrder = body.draft_order?.length
       ? body.draft_order
-      : ["player-1", "player-2", "player-3", "player-4"];
+      : ["MinJungKyu", "PaulHawk", "PigTank", "Dylpickle"];
 
     if (draftOrder.length !== 4) {
       return error("draft_order must contain exactly 4 user ids");

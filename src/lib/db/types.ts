@@ -3,6 +3,7 @@ import type { DraftStatus, TournamentStatus } from "@/lib/status";
 export interface User {
   id: string;
   name: string;
+  username?: string | null;
   is_admin: number | boolean;
 }
 

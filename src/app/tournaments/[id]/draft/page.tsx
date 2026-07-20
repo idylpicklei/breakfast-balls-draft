@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiFetch, getDevUserId } from "@/lib/api-client";
+import { apiFetch } from "@/lib/api-client";
 import type { AuthUser, DraftOrder, DraftSession, Roster, Tournament } from "@/lib/db/types";
 
 interface PlayerHit {
@@ -93,7 +93,8 @@ export default function DraftPage() {
       }
       try {
         const data = await refreshDraft();
-        const myId = me?.id ?? getDevUserId();
+        const myId = me?.id;
+        if (!myId) return;
         const pickCount = data.rosters.length;
 
         if (pickCount > prevPickCountRef.current) {
@@ -131,8 +132,9 @@ export default function DraftPage() {
 
   const isMyTurn =
     !!draft &&
+    !!me &&
     draft.draft_session.draft_status === "LIVE" &&
-    draft.active_user_id === (me?.id ?? getDevUserId());
+    draft.active_user_id === me.id;
 
   const filteredPlayers = useMemo(() => {
     const players = draft?.available_players ?? [];
