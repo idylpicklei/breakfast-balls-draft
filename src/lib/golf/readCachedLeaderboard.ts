@@ -41,8 +41,10 @@ export async function readCachedLeaderboard(
        FROM golf_leaderboard_rows
        WHERE tournament_id = ? AND year = ?
        ORDER BY
+         CASE WHEN total IS NULL THEN 1 ELSE 0 END,
+         total ASC,
          CASE WHEN position GLOB '[0-9]*' THEN CAST(position AS INTEGER) ELSE 999 END,
-         position ASC`,
+         last_name ASC, first_name ASC`,
     )
     .bind(tournId, year)
     .all<CachedRow>();
