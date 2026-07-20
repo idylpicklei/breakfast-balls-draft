@@ -80,7 +80,7 @@ function buildScoreboardClipboardText(data: LeaderboardResponse): string {
   for (const team of leaderboard.teams) {
     lines.push(team.user_name);
     for (const p of team.players) {
-      lines.push(`  ${p.player_name}: ${formatPlayerScore(p)}`);
+      lines.push(`${p.player_name}: ${formatPlayerScore(p)}`);
     }
     lines.push(`Best Foursome = ${formatStandingTotal(team)}`);
     lines.push("");
