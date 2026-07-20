@@ -34,6 +34,40 @@ function formatScore(score: number | null | undefined) {
   return score > 0 ? `+${score}` : String(score);
 }
 
+function formatOutLabel(position: string | null | undefined): string | null {
+  if (!position) return null;
+  const p = position.trim().toUpperCase();
+  if (p === "CUT" || p === "MC") return "MC";
+  if (p === "WD" || p === "DQ" || p === "DNS" || p === "MDF") return p;
+  return null;
+}
+
+function formatPlayerScore(player: {
+  missed_cut?: boolean;
+  position: string | null;
+  par_relative_score: number | null;
+}) {
+  if (player.missed_cut) return formatOutLabel(player.position) ?? "MC";
+  return formatScore(player.par_relative_score);
+}
+
+function formatStandingTotal(standing: {
+  missed_cut?: boolean;
+  best_four_total: number | null;
+}) {
+  if (standing.missed_cut) return "MC";
+  return formatScore(standing.best_four_total);
+}
+
+function formatPgaTotal(row: {
+  missedCut?: boolean;
+  position: string | null;
+  total: number | null;
+}) {
+  if (row.missedCut) return formatOutLabel(row.position) ?? "MC";
+  return formatScore(row.total);
+}
+
 function formatUpdated(iso: string | null) {
   if (!iso) return "Never";
   return new Date(iso).toLocaleString();
@@ -136,60 +170,13 @@ export default function ScoreboardPage() {
         </p>
       )}
 
-      {leaderboard.partnerships.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="font-[family-name:var(--font-display)] text-2xl">
-            {leaderboard.partnerships.map((p) => p.team_name).join(" vs ")}
-          </h2>
-          <p className="text-sm text-[var(--muted)]">
-            Best 4 of 12 combined golfers per side. Lower total wins.
-          </p>
-          <div className="overflow-x-auto border border-[var(--line)] bg-[var(--panel)]/80">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-[var(--line)] bg-[var(--surface)]">
-                <tr>
-                  <th className="px-3 py-2 font-semibold">#</th>
-                  <th className="px-3 py-2 font-semibold">Side</th>
-                  <th className="px-3 py-2 font-semibold">Best 4</th>
-                </tr>
-              </thead>
-              <tbody>
-                {leaderboard.partnerships.map((side, index) => (
-                  <tr key={side.team_id} className="border-b border-[var(--line)]/70">
-                    <td className="px-3 py-2">{index + 1}</td>
-                    <td className="px-3 py-2">
-                      <p className="font-medium">{side.team_name}</p>
-                      <p className="text-xs text-[var(--muted)]">
-                        {side.member_names.join(" · ")}
-                      </p>
-                      <ul className="mt-2 space-y-0.5 text-xs text-[var(--muted)]">
-                        {side.players.map((p) => (
-                          <li key={p.player_id}>
-                            {p.player_name}: {formatScore(p.par_relative_score)}
-                            {side.counted_player_ids.includes(p.player_id) ? " · counts" : ""}
-                            {p.thru ? ` · thru ${p.thru}` : ""}
-                          </li>
-                        ))}
-                      </ul>
-                    </td>
-                    <td className="px-3 py-2 font-semibold">
-                      {formatScore(side.best_four_total)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-
       <section className="grid gap-8 lg:grid-cols-2">
         <div className="space-y-3">
           <h2 className="font-[family-name:var(--font-display)] text-2xl">
             Individual standings
           </h2>
           <p className="text-sm text-[var(--muted)]">
-            Best 4 of 6 from cached scores. Each player shows daily total.
+            Best 4 of 6 that make the cut. Missed cut = MC and does not count.
           </p>
           <div className="overflow-x-auto border border-[var(--line)] bg-[var(--panel)]/80">
             <table className="w-full text-left text-sm">
@@ -209,14 +196,14 @@ export default function ScoreboardPage() {
                       <ul className="mt-1 space-y-0.5 text-xs text-[var(--muted)]">
                         {team.players.map((p) => (
                           <li key={p.player_id}>
-                            {p.player_name}: {formatScore(p.par_relative_score)}
-                            {p.thru ? ` · thru ${p.thru}` : ""}
+                            {p.player_name}: {formatPlayerScore(p)}
+                            {!p.missed_cut && p.thru ? ` · thru ${p.thru}` : ""}
                           </li>
                         ))}
                       </ul>
                     </td>
                     <td className="px-3 py-2 font-semibold">
-                      {formatScore(team.best_four_total)}
+                      {formatStandingTotal(team)}
                     </td>
                   </tr>
                 ))}
@@ -251,6 +238,35 @@ export default function ScoreboardPage() {
               )}
             </div>
           </div>
+
+          {leaderboard.partnerships.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="font-[family-name:var(--font-display)] text-2xl">
+                {leaderboard.partnerships.map((p) => p.team_name).join(" vs ")}
+              </h2>
+              <p className="text-sm text-[var(--muted)]">
+                Best 4 of 12 that make the cut. Lower total wins; MC if fewer than 4 make it.
+              </p>
+              <div className="border border-[var(--line)] bg-[var(--panel)]/80 divide-y divide-[var(--line)]">
+                {leaderboard.partnerships.map((side) => (
+                  <div
+                    key={side.team_id}
+                    className="flex items-baseline justify-between gap-4 px-4 py-3"
+                  >
+                    <div>
+                      <p className="font-medium">{side.team_name}</p>
+                      <p className="text-xs text-[var(--muted)]">
+                        {side.member_names.join(" · ")}
+                      </p>
+                    </div>
+                    <p className="font-[family-name:var(--font-display)] text-2xl font-semibold">
+                      {formatStandingTotal(side)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -298,7 +314,7 @@ export default function ScoreboardPage() {
                     <td className="px-3 py-2">
                       {row.firstName} {row.lastName}
                     </td>
-                    <td className="px-3 py-2 font-medium">{formatScore(row.total)}</td>
+                    <td className="px-3 py-2 font-medium">{formatPgaTotal(row)}</td>
                     <td className="px-3 py-2">{row.currentRoundScore ?? "—"}</td>
                     <td className="px-3 py-2">{row.thru ?? "—"}</td>
                     <td className="px-3 py-2 text-[var(--muted)]">

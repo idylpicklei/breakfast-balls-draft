@@ -9,16 +9,27 @@ export function parseScore(value: string | number | null | undefined): number | 
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Positions that mean the player is out of the event (no fantasy total). */
+export function isMissedCutPosition(position: string | null | undefined): boolean {
+  if (position == null || position === "") return false;
+  const p = String(position).trim().toUpperCase();
+  return p === "CUT" || p === "MC" || p === "WD" || p === "DQ" || p === "DNS" || p === "MDF";
+}
+
 export function normalizeLeaderboardRow(row: LeaderboardRow): NormalizedLeaderboardRow | null {
   if (!row?.playerId) return null;
+  const position = row.position != null ? String(row.position) : null;
+  const missedCut = isMissedCutPosition(position);
   const total = parseScore(row.total);
   return {
     playerId: row.playerId,
     firstName: row.firstName ?? "",
     lastName: row.lastName ?? "",
-    position: row.position != null ? String(row.position) : null,
+    position,
     total,
-    parRelativeScore: total,
+    // Cut players keep raw total for reference but do not count in fantasy scoring
+    parRelativeScore: missedCut ? null : total,
+    missedCut,
     currentRoundScore:
       row.currentRoundScore != null ? String(row.currentRoundScore) : null,
     currentHole: row.currentHole != null ? String(row.currentHole) : null,

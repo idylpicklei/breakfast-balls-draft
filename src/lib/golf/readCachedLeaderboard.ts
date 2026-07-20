@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db/client";
+import { isMissedCutPosition } from "@/lib/golf/normalize";
 import type { NormalizedLeaderboardRow } from "@/lib/golf/types";
 
 export interface CachedLeaderboardResult {
@@ -49,17 +50,21 @@ export async function readCachedLeaderboard(
     .bind(tournId, year)
     .all<CachedRow>();
 
-  const rows: NormalizedLeaderboardRow[] = (results ?? []).map((r) => ({
-    playerId: r.player_id,
-    firstName: r.first_name ?? "",
-    lastName: r.last_name ?? "",
-    position: r.position,
-    total: r.total,
-    parRelativeScore: r.total,
-    currentRoundScore: r.current_round_score,
-    currentHole: r.current_hole,
-    thru: r.thru,
-  }));
+  const rows: NormalizedLeaderboardRow[] = (results ?? []).map((r) => {
+    const missedCut = isMissedCutPosition(r.position);
+    return {
+      playerId: r.player_id,
+      firstName: r.first_name ?? "",
+      lastName: r.last_name ?? "",
+      position: r.position,
+      total: r.total,
+      parRelativeScore: missedCut ? null : r.total,
+      missedCut,
+      currentRoundScore: r.current_round_score,
+      currentHole: r.current_hole,
+      thru: r.thru,
+    };
+  });
 
   return {
     tournId,

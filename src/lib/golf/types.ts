@@ -53,6 +53,8 @@ export interface NormalizedLeaderboardRow {
   position: string | null;
   total: number | null;
   parRelativeScore: number | null;
+  /** Missed cut / WD / DQ — excluded from fantasy totals */
+  missedCut: boolean;
   currentRoundScore: string | null;
   currentHole: string | null;
   thru: string | null;
