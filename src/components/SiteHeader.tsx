@@ -2,22 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import { apiFetch } from "@/lib/api-client";
-import type { AuthUser } from "@/lib/db/types";
 
 export function SiteHeader() {
   const router = useRouter();
-  const [me, setMe] = useState<AuthUser | null | undefined>(undefined);
-
-  useEffect(() => {
-    apiFetch<AuthUser>("/api/me")
-      .then(setMe)
-      .catch(() => setMe(null));
-  }, []);
+  const { me, setMe } = useAuth();
 
   async function logout() {
-    await apiFetch("/api/auth/logout", { method: "POST" });
+    try {
+      await apiFetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Clear local session even if the request fails
+    }
     setMe(null);
     router.push("/login");
     router.refresh();

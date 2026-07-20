@@ -1,38 +1,36 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api-client";
+import { useEffect } from "react";
+import { useAuth } from "@/components/AuthProvider";
 
 const PUBLIC_PATHS = ["/login"];
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const { me } = useAuth();
+  const isPublic = PUBLIC_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
 
   useEffect(() => {
-    if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
-      setReady(true);
-      return;
+    if (isPublic) return;
+    if (me === null) {
+      router.replace("/login");
     }
+  }, [isPublic, me, router]);
 
-    let cancelled = false;
-    apiFetch("/api/me")
-      .then(() => {
-        if (!cancelled) setReady(true);
-      })
-      .catch(() => {
-        if (!cancelled) router.replace("/login");
-      });
+  if (isPublic) {
+    return children;
+  }
 
-    return () => {
-      cancelled = true;
-    };
-  }, [pathname, router]);
-
-  if (!ready) {
+  if (me === undefined) {
     return <p className="text-[var(--muted)]">Loading…</p>;
+  }
+
+  if (me === null) {
+    return <p className="text-[var(--muted)]">Redirecting to login…</p>;
   }
 
   return children;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Source_Sans_3 } from "next/font/google";
 import { AuthGate } from "@/components/AuthGate";
+import { AuthProvider } from "@/components/AuthProvider";
 import { SiteHeader } from "@/components/SiteHeader";
 import "./globals.css";
 
@@ -27,10 +28,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${display.variable} ${body.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <SiteHeader />
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-          <AuthGate>{children}</AuthGate>
-        </main>
+        <AuthProvider>
+          <SiteHeader />
+          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+            <AuthGate>{children}</AuthGate>
+          </main>
+        </AuthProvider>
       </body>
     </html>
   );

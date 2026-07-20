@@ -27,9 +27,7 @@ export default function HomePage() {
         <p className="font-[family-name:var(--font-display)] text-5xl leading-none tracking-tight text-[var(--ink)] md:text-7xl">
           Breakfast Balls
         </p>
-        <p className="mt-4 max-w-xl text-lg text-[var(--muted)]">
-          Four players. Six rounds. Snake draft. Live golf standings for the league that tees off before brunch.
-        </p>
+
       </section>
 
       <section className="space-y-4">

@@ -2,11 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { useAuth } from "@/components/AuthProvider";
 import { apiFetch } from "@/lib/api-client";
 import type { AuthUser } from "@/lib/db/types";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { setMe } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -17,10 +19,11 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await apiFetch<{ user: AuthUser }>("/api/auth/login", {
+      const data = await apiFetch<{ user: AuthUser }>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ username, password }),
       });
+      setMe(data.user);
       router.push("/");
       router.refresh();
     } catch (err) {
