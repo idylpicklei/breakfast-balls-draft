@@ -32,10 +32,18 @@ Open [http://localhost:3000](http://localhost:3000). Use **Playing as** in the h
 
 | Name | Where | Purpose |
 |------|--------|---------|
-| `RAPID_API` | Wrangler secret / `.dev.vars` | RapidAPI key for schedule/field/leaderboard |
+| `RAPID_API` | Worker **runtime** Secret + local `.env` | RapidAPI key for schedule/field/leaderboard |
 | Access JWT / email headers | Cloudflare Access | Production identity → `users.id` |
 
-Create `.dev.vars` for local Worker preview:
+### Setting `RAPID_API` on Cloudflare (common “undefined” fix)
+
+1. Worker → **Settings → Variables and Secrets** (runtime, not Build settings)
+2. Add **Secret** named exactly `RAPID_API` (case-sensitive)
+3. Redeploy with `--keep-vars` so dashboard secrets are not wiped (`npm run deploy` already does this)
+
+Also set the same name under **Build → Variables and secrets** if Workers Builds needs it at build time (SSG). Runtime still requires the Worker secret above.
+
+Local Next.js: put the key in `.env`:
 
 ```
 RAPID_API=your_rapidapi_key_here

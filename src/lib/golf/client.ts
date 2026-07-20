@@ -1,4 +1,4 @@
-import { getEnv } from "@/lib/db/client";
+import { getSecret } from "@/lib/db/client";
 
 export const RAPIDAPI_HOST = "live-golf-data.p.rapidapi.com";
 export const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}`;
@@ -18,10 +18,13 @@ export async function rapidFetch<T>(
   path: string,
   query?: Record<string, string | number | undefined>,
 ): Promise<T> {
-  const env = await getEnv();
-  const apiKey = env.RAPID_API;
+  // OpenNext: Worker secrets land on process.env; also fall back to CF env binding
+  const apiKey = await getSecret("RAPID_API");
   if (!apiKey) {
-    throw new RapidApiError("RAPID_API is not configured", 500);
+    throw new RapidApiError(
+      "RAPID_API is not configured — set a Worker runtime Secret named RAPID_API (Settings → Variables and Secrets), then redeploy with --keep-vars",
+      500,
+    );
   }
 
   const url = new URL(`${RAPIDAPI_BASE}${path}`);

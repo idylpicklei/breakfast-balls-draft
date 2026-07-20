@@ -1,4 +1,4 @@
-import { getDb, getEnv } from "@/lib/db/client";
+import { getDb, getSecret } from "@/lib/db/client";
 import type { AuthUser, User } from "@/lib/db/types";
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -29,12 +29,8 @@ async function loadUser(id: string): Promise<AuthUser | null> {
 }
 
 async function headerAuthAllowed(): Promise<boolean> {
-  try {
-    const env = await getEnv();
-    if (env.ALLOW_HEADER_AUTH === "true") return true;
-  } catch {
-    // ignore — fall through to NODE_ENV check
-  }
+  const flag = await getSecret("ALLOW_HEADER_AUTH");
+  if (flag === "true") return true;
   return process.env.NODE_ENV !== "production";
 }
 
