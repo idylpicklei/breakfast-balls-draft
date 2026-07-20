@@ -58,7 +58,7 @@ export default function HomePage() {
               <div>
                 <p className="font-semibold text-[var(--ink)]">{t.name}</p>
                 <p className="text-sm text-[var(--muted)]">
-                  {t.status} · BDL #{t.bdl_tournament_id}
+                  {t.status} · PGA {t.external_tournament_id} ({t.year})
                 </p>
               </div>
               <div className="flex gap-2">

@@ -17,9 +17,8 @@ export async function apiFetch<T>(
   if (!headers.has("Content-Type") && init.body) {
     headers.set("Content-Type", "application/json");
   }
-  if (process.env.NODE_ENV !== "production") {
-    headers.set("x-dev-user-id", getDevUserId());
-  }
+  // Private league identity until Cloudflare Access is wired up.
+  headers.set("x-dev-user-id", getDevUserId());
 
   const res = await fetch(path, { ...init, headers });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };

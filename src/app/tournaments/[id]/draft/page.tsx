@@ -17,7 +17,7 @@ interface DraftPayload {
 }
 
 interface PlayerHit {
-  id: number;
+  id: string;
   name: string;
 }
 
@@ -48,7 +48,7 @@ export default function DraftPage() {
   }, [load]);
 
   const draftedIds = useMemo(
-    () => new Set(draft?.rosters.map((r) => r.bdl_player_id) ?? []),
+    () => new Set(draft?.rosters.map((r) => r.player_id) ?? []),
     [draft],
   );
 
@@ -70,13 +70,13 @@ export default function DraftPage() {
     }
   }
 
-  async function makePick(bdlPlayerId: number, playerName: string) {
+  async function makePick(playerId: string, playerName: string) {
     setBusy(true);
     setError(null);
     try {
       await apiFetch("/api/draft/pick", {
         method: "POST",
-        body: JSON.stringify({ tournamentId, bdlPlayerId, playerName }),
+        body: JSON.stringify({ tournamentId, playerId, playerName }),
       });
       setHits([]);
       setQuery("");
@@ -92,12 +92,9 @@ export default function DraftPage() {
     e.preventDefault();
     setError(null);
     try {
-      const data = await apiFetch<{ players: PlayerHit[]; fetch_error?: string }>(
-        `/api/players/search?q=${encodeURIComponent(query)}`,
+      const data = await apiFetch<{ players: PlayerHit[] }>(
+        `/api/players/search?q=${encodeURIComponent(query)}&tournId=${encodeURIComponent(draft!.tournament.external_tournament_id)}&year=${encodeURIComponent(draft!.tournament.year)}`,
       );
-      if (data.fetch_error) {
-        setError(data.fetch_error + " — use manual pick below.");
-      }
       setHits(data.players.filter((p) => !draftedIds.has(p.id)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed");
@@ -165,7 +162,7 @@ export default function DraftPage() {
               {rosters
                 .filter((r) => r.user_id === slot.user_id)
                 .map((r) => (
-                  <li key={r.bdl_player_id}>
+                  <li key={r.player_id}>
                     #{r.pick_number} {r.player_name}
                   </li>
                 ))}
@@ -210,7 +207,7 @@ export default function DraftPage() {
 
           <div className="space-y-2 border-t border-[var(--line)] pt-4">
             <p className="text-sm text-[var(--muted)]">
-              Manual pick (if balldontlie search is unavailable)
+              Manual pick (search cached PGA field first)
             </p>
             <div className="flex flex-wrap gap-2">
               <input
@@ -227,7 +224,7 @@ export default function DraftPage() {
               />
               <button
                 disabled={busy || !manualId || !manualName}
-                onClick={() => makePick(Number(manualId), manualName)}
+                onClick={() => makePick(manualId, manualName)}
                 className="bg-[var(--fairway)] px-4 py-2 text-sm text-white disabled:opacity-50"
               >
                 Submit pick

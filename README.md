@@ -1,6 +1,6 @@
 # Breakfast Balls
 
-Private fantasy golf league: 4-player snake draft (6 rounds / 24 picks) on Cloudflare Workers with Next.js, D1, and live PGA standings from [balldontlie](https://pga.balldontlie.io/).
+Private fantasy golf league: 4-player snake draft (6 rounds / 24 picks) on Cloudflare Workers with Next.js, D1, and live PGA data from [RapidAPI Live Golf Data](https://rapidapi.com/slashgolf/api/live-golf-data).
 
 ## Stack
 
@@ -8,7 +8,15 @@ Private fantasy golf league: 4-player snake draft (6 rounds / 24 picks) on Cloud
 - `@opennextjs/cloudflare` → Cloudflare Workers
 - Cloudflare D1 (`DB` binding)
 - Cloudflare Access for production auth
-- balldontlie PGA API (`BALLDONTLIE_API_KEY`)
+- RapidAPI Live Golf Data (`RAPID_API`)
+
+## Data flow
+
+1. **Sync schedule** (admin, 1 API call) → caches PGA tournaments in D1
+2. **Sync field** (admin on league create, 1 API call) → caches players for draft search
+3. **Draft** → search cached field only (0 API calls)
+4. **Refresh scores** (admin, 1 API call per refresh) → caches leaderboard rows in D1
+5. **Scoreboard** → reads D1 cache only (0 API calls for friends)
 
 ## Local setup
 
@@ -18,80 +26,77 @@ npm run db:migrate:local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Use the **Dev user** switcher in the header (`admin` can create tournaments and start drafts).
+Open [http://localhost:3000](http://localhost:3000). Use **Playing as** in the header (`admin` can sync schedule and create tournaments).
 
 ### Secrets / env
 
 | Name | Where | Purpose |
 |------|--------|---------|
-| `BALLDONTLIE_API_KEY` | Wrangler secret / `.dev.vars` | PGA standings + player search |
+| `RAPID_API` | Wrangler secret / `.dev.vars` | RapidAPI key for schedule/field/leaderboard |
 | Access JWT / email headers | Cloudflare Access | Production identity → `users.id` |
 
 Create `.dev.vars` for local Worker preview:
 
 ```
-BALLDONTLIE_API_KEY=your_key_here
+RAPID_API=your_rapidapi_key_here
 ```
 
 ### Seed users
-
-Migration seeds:
 
 | id | name | admin |
 |----|------|-------|
 | `admin` | Admin | yes |
 | `player-1` … `player-4` | Player One–Four | no |
 
-For production Access, update `users.id` values to each member’s Access email (or `sub`) so JWT/email headers map correctly.
-
 ## Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `npm run dev` | Next.js local dev (OpenNext Cloudflare bindings) |
-| `npm run build` | Next.js build only (required name — OpenNext calls this) |
-| `npm run cf:build` | OpenNext Cloudflare build (creates `.open-next/`) |
+| `npm run dev` | Next.js local dev |
+| `npm run build` | Next.js build only (OpenNext calls this) |
+| `npm run cf:build` | OpenNext Cloudflare build |
 | `npm run db:migrate:local` | Apply D1 migrations locally |
 | `npm run db:migrate:remote` | Apply D1 migrations to remote DB |
 | `npm run preview` | OpenNext build + Wrangler preview |
 | `npm run deploy` | OpenNext build + deploy |
-| `npm run cf-typegen` | Regenerate Cloudflare `Env` types |
 
-### Cloudflare Workers Builds (Git deploy)
-
-`npm run build` **must** stay as `next build`. OpenNext invokes that script; pointing it at `opennextjs-cloudflare build` causes an infinite loop and CI timeout.
-
-In the Worker → **Settings → Build**:
+### Cloudflare Workers Builds
 
 | Setting | Value |
 |---------|--------|
 | Build command | `npx opennextjs-cloudflare build` |
 | Deploy command | `npx wrangler deploy` |
 
-Or leave Build empty and set Deploy to `npm run deploy`.
+### Database migrations
 
-Local API key for bindings: use `.dev.vars` (not only `.env`):
-
-```
-BALLDONTLIE_API_KEY=your_key_here
-```
-
-## Remote D1
+Workers Builds does **not** apply D1 migrations:
 
 ```bash
-npx wrangler d1 create breakfast-balls
-# put the real database_id into wrangler.jsonc
 npm run db:migrate:remote
-npx wrangler secret put BALLDONTLIE_API_KEY
+```
+
+### Auth (production)
+
+`ALLOW_HEADER_AUTH=true` in `wrangler.jsonc` enables the “Playing as” header until Cloudflare Access is configured.
+
+## Remote deploy
+
+```bash
+npm run db:migrate:remote
+npx wrangler secret put RAPID_API
 npm run deploy
 ```
 
-Put Cloudflare Access in front of the Worker hostname. Map Access identities to seeded (or updated) `users` rows.
+## Admin workflow
+
+1. Admin → **Sync schedule** for the season year
+2. Select a cached PGA tournament → **Create tournament** (auto-syncs field)
+3. Start draft → players search the cached field
+4. After draft, admin clicks **Refresh scores** on the scoreboard (once per day)
+5. Friends view scoreboard from cache — no API calls
 
 ## Scoring (v1)
 
-- **Best 4 of 6:** sum of each user’s four lowest `par_relative_score` values
-- **Best single player:** lowest `par_relative_score` among all 24 drafted players
-- **Custom prize rule:** stored and shown on the scoreboard; not auto-ranked yet
-
-Standings come from `GET /pga/v1/tournament_results` (ALL-STAR tier).
+- **Best 4 of 6:** lowest combined `total` from each team’s best 4 drafted players
+- **Best single player:** lowest `total` among all 24 drafted players
+- **Custom prize rule:** display only

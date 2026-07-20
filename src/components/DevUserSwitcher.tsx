@@ -18,11 +18,9 @@ export function DevUserSwitcher() {
     setUserId(getDevUserId());
   }, []);
 
-  if (process.env.NODE_ENV === "production") return null;
-
   return (
     <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
-      <span>Dev user</span>
+      <span>Playing as</span>
       <select
         className="rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-1 text-[var(--ink)]"
         value={userId}

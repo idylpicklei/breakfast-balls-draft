@@ -1,4 +1,4 @@
-import { getDb } from "@/lib/db/client";
+import { getDb, getEnv } from "@/lib/db/client";
 import type { AuthUser, User } from "@/lib/db/types";
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -28,14 +28,24 @@ async function loadUser(id: string): Promise<AuthUser | null> {
   return { id: row.id, name: row.name, is_admin: asBool(row.is_admin) };
 }
 
+async function headerAuthAllowed(): Promise<boolean> {
+  try {
+    const env = await getEnv();
+    if (env.ALLOW_HEADER_AUTH === "true") return true;
+  } catch {
+    // ignore — fall through to NODE_ENV check
+  }
+  return process.env.NODE_ENV !== "production";
+}
+
 /**
  * Resolve the current user from Cloudflare Access headers.
- * Local/dev: send `x-dev-user-id: admin` (or a seeded user id) when Access is absent.
+ * With ALLOW_HEADER_AUTH=true (or non-production), also accept x-dev-user-id.
  */
 export async function getAuthUser(request: Request): Promise<AuthUser | null> {
   const email = request.headers.get("cf-access-authenticated-user-email");
   const assertion = request.headers.get("cf-access-jwt-assertion");
-  const devUserId = request.headers.get("x-dev-user-id");
+  const headerUserId = request.headers.get("x-dev-user-id");
 
   let identity: string | null = null;
   let displayName: string | null = null;
@@ -53,9 +63,9 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
       (typeof payload?.name === "string" && payload.name) ||
       jwtEmail?.split("@")[0] ||
       sub;
-  } else if (devUserId && process.env.NODE_ENV !== "production") {
-    identity = devUserId;
-    displayName = devUserId;
+  } else if (headerUserId && (await headerAuthAllowed())) {
+    identity = headerUserId;
+    displayName = headerUserId;
   }
 
   if (!identity) return null;

@@ -3,7 +3,9 @@
 declare global {
   interface CloudflareEnv {
     DB: D1Database;
-    BALLDONTLIE_API_KEY?: string;
+    RAPID_API?: string;
+    /** When "true", accept x-dev-user-id header (private league before Cloudflare Access). */
+    ALLOW_HEADER_AUTH?: string;
   }
 }
 

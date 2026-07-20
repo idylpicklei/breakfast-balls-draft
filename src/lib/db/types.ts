@@ -8,11 +8,29 @@ export interface User {
 
 export interface Tournament {
   id: string;
-  bdl_tournament_id: number;
+  external_tournament_id: string;
+  year: string;
   name: string;
   status: TournamentStatus;
   custom_prize_rule: string;
   created_at: string;
+}
+
+export interface GolfTournament {
+  id: string;
+  name: string;
+  year: string;
+  start_date: string | null;
+  end_date: string | null;
+  status: string | null;
+  last_synced: string;
+}
+
+export interface GolfPlayer {
+  id: string;
+  first_name: string;
+  last_name: string;
+  status: string | null;
 }
 
 export interface DraftSession {
@@ -30,7 +48,7 @@ export interface DraftOrder {
 export interface Roster {
   tournament_id: string;
   user_id: string;
-  bdl_player_id: number;
+  player_id: string;
   player_name: string;
   pick_number: number;
 }
@@ -39,4 +57,8 @@ export interface AuthUser {
   id: string;
   name: string;
   is_admin: boolean;
+}
+
+export function golfPlayerName(player: Pick<GolfPlayer, "first_name" | "last_name">): string {
+  return [player.first_name, player.last_name].filter(Boolean).join(" ") || "Unknown";
 }

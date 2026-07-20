@@ -1,8 +1,7 @@
 import { requireAdmin, requireAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db/client";
-import type { Tournament } from "@/lib/db/types";
-import { getTournamentById } from "@/lib/balldontlie";
-import { DRAFT_SLOTS } from "@/lib/status";
+import type { GolfTournament, Tournament } from "@/lib/db/types";
+import { syncTournamentField } from "@/lib/golf/syncTournamentField";
 import { error, handleRouteError, json, readJson } from "@/lib/http";
 
 export async function GET(request: Request) {
@@ -11,7 +10,8 @@ export async function GET(request: Request) {
     const db = await getDb();
     const { results } = await db
       .prepare(
-        "SELECT id, bdl_tournament_id, name, status, custom_prize_rule, created_at FROM tournaments ORDER BY created_at DESC",
+        `SELECT id, external_tournament_id, year, name, status, custom_prize_rule, created_at
+         FROM tournaments ORDER BY created_at DESC`,
       )
       .all<Tournament>();
     return json({ tournaments: results ?? [] });
@@ -21,10 +21,12 @@ export async function GET(request: Request) {
 }
 
 interface CreateBody {
-  bdl_tournament_id: number;
+  external_tournament_id: string;
+  year: string;
   name: string;
   custom_prize_rule: string;
   draft_order?: string[];
+  sync_field?: boolean;
 }
 
 export async function POST(request: Request) {
@@ -32,35 +34,56 @@ export async function POST(request: Request) {
     await requireAdmin(request);
     const body = await readJson<CreateBody>(request);
 
-    if (!body.bdl_tournament_id || !body.name?.trim() || !body.custom_prize_rule?.trim()) {
-      return error("bdl_tournament_id, name, and custom_prize_rule are required");
+    if (
+      !body.external_tournament_id?.trim() ||
+      !body.year?.trim() ||
+      !body.name?.trim() ||
+      !body.custom_prize_rule?.trim()
+    ) {
+      return error("external_tournament_id, year, name, and custom_prize_rule are required");
     }
 
     const draftOrder = body.draft_order?.length
       ? body.draft_order
       : ["player-1", "player-2", "player-3", "player-4"];
 
-    if (draftOrder.length !== DRAFT_SLOTS) {
-      return error(`draft_order must contain exactly ${DRAFT_SLOTS} user ids`);
+    if (draftOrder.length !== 4) {
+      return error("draft_order must contain exactly 4 user ids");
     }
 
-    // Soft-validate external tournament id
-    try {
-      await getTournamentById(body.bdl_tournament_id);
-    } catch {
-      // ignore — allow create without live API in local/dev
+    const tournId = body.external_tournament_id.trim();
+    const year = body.year.trim();
+    const db = await getDb();
+
+    const cached = await db
+      .prepare("SELECT id FROM golf_tournaments WHERE id = ? AND year = ?")
+      .bind(tournId, year)
+      .first<GolfTournament>();
+
+    if (!cached) {
+      return error(
+        "Tournament not in cache — sync schedule first, then select a cached tournId",
+        400,
+      );
+    }
+
+    if (body.sync_field !== false) {
+      try {
+        await syncTournamentField(tournId, year);
+      } catch (err) {
+        console.error("[create tournament] field sync failed:", err);
+      }
     }
 
     const id = crypto.randomUUID();
-    const db = await getDb();
 
     const statements = [
       db
         .prepare(
-          `INSERT INTO tournaments (id, bdl_tournament_id, name, status, custom_prize_rule)
-           VALUES (?, ?, ?, 'SCHEDULED', ?)`,
+          `INSERT INTO tournaments (id, external_tournament_id, year, name, status, custom_prize_rule)
+           VALUES (?, ?, ?, ?, 'SCHEDULED', ?)`,
         )
-        .bind(id, body.bdl_tournament_id, body.name.trim(), body.custom_prize_rule.trim()),
+        .bind(id, tournId, year, body.name.trim(), body.custom_prize_rule.trim()),
       db
         .prepare(
           `INSERT INTO draft_sessions (tournament_id, current_pick, draft_status)
@@ -81,7 +104,8 @@ export async function POST(request: Request) {
 
     const tournament = await db
       .prepare(
-        "SELECT id, bdl_tournament_id, name, status, custom_prize_rule, created_at FROM tournaments WHERE id = ?",
+        `SELECT id, external_tournament_id, year, name, status, custom_prize_rule, created_at
+         FROM tournaments WHERE id = ?`,
       )
       .bind(id)
       .first<Tournament>();

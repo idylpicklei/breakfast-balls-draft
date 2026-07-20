@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
-import type { AuthUser, Tournament } from "@/lib/db/types";
+import type { AuthUser, GolfTournament, Tournament } from "@/lib/db/types";
 
 const DEFAULT_ORDER = ["player-1", "player-2", "player-3", "player-4"];
 
@@ -12,17 +12,48 @@ export default function AdminPage() {
   const [me, setMe] = useState<AuthUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [cached, setCached] = useState<GolfTournament[]>([]);
+  const [selectedTournId, setSelectedTournId] = useState("");
   const [name, setName] = useState("");
-  const [bdlId, setBdlId] = useState("");
   const [prizeRule, setPrizeRule] = useState("Most combined birdies");
   const [order, setOrder] = useState(DEFAULT_ORDER.join(", "));
+
+  async function loadCachedSchedule(scheduleYear: string) {
+    const data = await apiFetch<{ tournaments: GolfTournament[] }>(
+      `/api/golf/tournaments?year=${encodeURIComponent(scheduleYear)}`,
+    );
+    setCached(data.tournaments);
+    if (data.tournaments.length > 0 && !selectedTournId) {
+      setSelectedTournId(data.tournaments[0].id);
+      setName(data.tournaments[0].name);
+    }
+  }
 
   useEffect(() => {
     apiFetch<AuthUser>("/api/me")
       .then(setMe)
       .catch((err: Error) => setError(err.message));
-  }, []);
+    loadCachedSchedule(year).catch(() => undefined);
+  }, [year]);
+
+  async function syncSchedule() {
+    setSyncing(true);
+    setError(null);
+    try {
+      await apiFetch("/api/golf/sync-schedule", {
+        method: "POST",
+        body: JSON.stringify({ year }),
+      });
+      await loadCachedSchedule(year);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Schedule sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -34,13 +65,17 @@ export default function AdminPage() {
         .map((s) => s.trim())
         .filter(Boolean);
 
+      const selected = cached.find((t) => t.id === selectedTournId);
+
       const data = await apiFetch<{ tournament: Tournament }>("/api/tournaments", {
         method: "POST",
         body: JSON.stringify({
-          name,
-          bdl_tournament_id: Number(bdlId),
+          name: name || selected?.name,
+          external_tournament_id: selectedTournId,
+          year,
           custom_prize_rule: prizeRule,
           draft_order,
+          sync_field: true,
         }),
       });
       router.push(`/tournaments/${data.tournament.id}/draft`);
@@ -58,37 +93,74 @@ export default function AdminPage() {
           Admin
         </h1>
         <p className="mt-2 text-[var(--muted)]">
-          Create a tournament mapped to a balldontlie PGA tournament id.
+          Sync the PGA schedule, then create a league tournament from cached RapidAPI data.
         </p>
       </div>
 
       {me && !me.is_admin && (
         <p className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Signed in as {me.name}, but not an admin. Switch Dev user to <strong>admin</strong>.
+          Signed in as {me.name}, but not an admin. Switch to <strong>admin</strong>.
         </p>
       )}
 
+      <section className="space-y-3 border border-[var(--line)] bg-[var(--panel)]/80 p-5">
+        <h2 className="font-semibold">1. Sync PGA schedule</h2>
+        <div className="flex flex-wrap gap-2">
+          <input
+            className="w-24 border border-[var(--line)] bg-white px-3 py-2"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            placeholder="2026"
+          />
+          <button
+            type="button"
+            disabled={syncing || (me != null && !me.is_admin)}
+            onClick={syncSchedule}
+            className="border border-[var(--line)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)] disabled:opacity-50"
+          >
+            {syncing ? "Syncing…" : "Sync schedule"}
+          </button>
+        </div>
+        <p className="text-sm text-[var(--muted)]">
+          {cached.length} tournaments cached for {year}.
+        </p>
+      </section>
+
       <form onSubmit={onSubmit} className="space-y-4 border border-[var(--line)] bg-[var(--panel)]/80 p-5">
+        <h2 className="font-semibold">2. Create league tournament</h2>
+
         <label className="block space-y-1 text-sm">
-          <span className="font-medium">Tournament name</span>
+          <span className="font-medium">PGA tournament</span>
+          <select
+            required
+            className="w-full border border-[var(--line)] bg-white px-3 py-2"
+            value={selectedTournId}
+            onChange={(e) => {
+              const id = e.target.value;
+              setSelectedTournId(id);
+              const hit = cached.find((t) => t.id === id);
+              if (hit) setName(hit.name);
+            }}
+          >
+            <option value="" disabled>
+              Select a cached tournament
+            </option>
+            {cached.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name} ({t.id})
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block space-y-1 text-sm">
+          <span className="font-medium">League display name</span>
           <input
             required
             className="w-full border border-[var(--line)] bg-white px-3 py-2"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="The Masters — League Week"
-          />
-        </label>
-
-        <label className="block space-y-1 text-sm">
-          <span className="font-medium">balldontlie tournament id</span>
-          <input
-            required
-            type="number"
-            className="w-full border border-[var(--line)] bg-white px-3 py-2"
-            value={bdlId}
-            onChange={(e) => setBdlId(e.target.value)}
-            placeholder="e.g. 100"
+            placeholder="Breakfast Balls Week 12"
           />
         </label>
 
@@ -116,7 +188,7 @@ export default function AdminPage() {
 
         <button
           type="submit"
-          disabled={saving || (me != null && !me.is_admin)}
+          disabled={saving || !selectedTournId || (me != null && !me.is_admin)}
           className="bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
           {saving ? "Creating…" : "Create tournament"}

@@ -1,10 +1,13 @@
 import type { Roster, User } from "@/lib/db/types";
-import type { BdlTournamentResult } from "@/lib/balldontlie";
+import type { NormalizedLeaderboardRow } from "@/lib/golf/types";
 
 export interface ScoredRosterPlayer extends Roster {
   par_relative_score: number | null;
   total_score: number | null;
   position: string | null;
+  current_round_score: string | null;
+  current_hole: string | null;
+  thru: string | null;
 }
 
 export interface TeamStanding {
@@ -12,11 +15,11 @@ export interface TeamStanding {
   user_name: string;
   best_four_total: number | null;
   players: ScoredRosterPlayer[];
-  counted_player_ids: number[];
+  counted_player_ids: string[];
 }
 
 export interface BestSinglePlayer {
-  bdl_player_id: number;
+  player_id: string;
   player_name: string;
   user_id: string;
   user_name: string;
@@ -26,6 +29,7 @@ export interface BestSinglePlayer {
 export interface LeaderboardPayload {
   tournament_id: string;
   custom_prize_rule: string;
+  round_status: string | null;
   teams: TeamStanding[];
   best_single_player: BestSinglePlayer | null;
 }
@@ -33,26 +37,28 @@ export interface LeaderboardPayload {
 export function buildLeaderboard(
   rosters: Roster[],
   users: User[],
-  results: BdlTournamentResult[],
+  rows: NormalizedLeaderboardRow[],
   customPrizeRule: string,
   tournamentId: string,
+  roundStatus: string | null = null,
 ): LeaderboardPayload {
-  const scoreByPlayer = new Map<number, BdlTournamentResult>();
-  for (const result of results) {
-    if (result.player?.id != null) {
-      scoreByPlayer.set(result.player.id, result);
-    }
+  const scoreByPlayer = new Map<string, NormalizedLeaderboardRow>();
+  for (const row of rows) {
+    scoreByPlayer.set(row.playerId, row);
   }
 
   const userName = new Map(users.map((u) => [u.id, u.name]));
 
   const scored: ScoredRosterPlayer[] = rosters.map((r) => {
-    const hit = scoreByPlayer.get(r.bdl_player_id);
+    const hit = scoreByPlayer.get(r.player_id);
     return {
       ...r,
-      par_relative_score: hit?.par_relative_score ?? null,
-      total_score: hit?.total_score ?? null,
+      par_relative_score: hit?.parRelativeScore ?? null,
+      total_score: hit?.total ?? null,
       position: hit?.position ?? null,
+      current_round_score: hit?.currentRoundScore ?? null,
+      current_hole: hit?.currentHole ?? null,
+      thru: hit?.thru ?? null,
     };
   });
 
@@ -79,7 +85,7 @@ export function buildLeaderboard(
       user_name: userName.get(userId) ?? userId,
       best_four_total: bestFourTotal,
       players: players.sort((a, b) => a.pick_number - b.pick_number),
-      counted_player_ids: top4.map((p) => p.bdl_player_id),
+      counted_player_ids: top4.map((p) => p.player_id),
     };
   });
 
@@ -98,7 +104,7 @@ export function buildLeaderboard(
       player.par_relative_score < bestSingle.par_relative_score
     ) {
       bestSingle = {
-        bdl_player_id: player.bdl_player_id,
+        player_id: player.player_id,
         player_name: player.player_name,
         user_id: player.user_id,
         user_name: userName.get(player.user_id) ?? player.user_id,
@@ -110,6 +116,7 @@ export function buildLeaderboard(
   return {
     tournament_id: tournamentId,
     custom_prize_rule: customPrizeRule,
+    round_status: roundStatus,
     teams,
     best_single_player: bestSingle,
   };

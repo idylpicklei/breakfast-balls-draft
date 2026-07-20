@@ -15,7 +15,8 @@ export async function GET(request: Request, { params }: Params) {
 
     const tournament = await db
       .prepare(
-        "SELECT id, bdl_tournament_id, name, status, custom_prize_rule, created_at FROM tournaments WHERE id = ?",
+        `SELECT id, external_tournament_id, year, name, status, custom_prize_rule, created_at
+         FROM tournaments WHERE id = ?`,
       )
       .bind(tournamentId)
       .first<Tournament>();
@@ -46,7 +47,7 @@ export async function GET(request: Request, { params }: Params) {
 
     const { results: rosters } = await db
       .prepare(
-        `SELECT tournament_id, user_id, bdl_player_id, player_name, pick_number
+        `SELECT tournament_id, user_id, player_id, player_name, pick_number
          FROM rosters WHERE tournament_id = ?
          ORDER BY pick_number ASC`,
       )

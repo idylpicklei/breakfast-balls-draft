@@ -7,7 +7,7 @@ import { error, handleRouteError, json, readJson } from "@/lib/http";
 
 interface PickBody {
   tournamentId: string;
-  bdlPlayerId: number;
+  playerId: string;
   playerName: string;
 }
 
@@ -16,8 +16,8 @@ export async function POST(request: Request) {
     const user = await requireAuth(request);
     const body = await readJson<PickBody>(request);
 
-    if (!body.tournamentId || !body.bdlPlayerId || !body.playerName?.trim()) {
-      return error("tournamentId, bdlPlayerId, and playerName are required");
+    if (!body.tournamentId || !body.playerId?.trim() || !body.playerName?.trim()) {
+      return error("tournamentId, playerId, and playerName are required");
     }
 
     const db = await getDb();
@@ -62,13 +62,13 @@ export async function POST(request: Request) {
       const statements = [
         db
           .prepare(
-            `INSERT INTO rosters (tournament_id, user_id, bdl_player_id, player_name, pick_number)
+            `INSERT INTO rosters (tournament_id, user_id, player_id, player_name, pick_number)
              VALUES (?, ?, ?, ?, ?)`,
           )
           .bind(
             body.tournamentId,
             user.id,
-            body.bdlPlayerId,
+            body.playerId.trim(),
             body.playerName.trim(),
             pickNumber,
           ),
@@ -78,11 +78,7 @@ export async function POST(request: Request) {
              SET current_pick = ?, draft_status = ?
              WHERE tournament_id = ?`,
           )
-          .bind(
-            finished ? nextPick : nextPick,
-            finished ? "FINISHED" : "LIVE",
-            body.tournamentId,
-          ),
+          .bind(nextPick, finished ? "FINISHED" : "LIVE", body.tournamentId),
       ];
 
       if (finished) {
