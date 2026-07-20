@@ -136,9 +136,58 @@ export default function ScoreboardPage() {
         </p>
       )}
 
+      {leaderboard.partnerships.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="font-[family-name:var(--font-display)] text-2xl">
+            {leaderboard.partnerships.map((p) => p.team_name).join(" vs ")}
+          </h2>
+          <p className="text-sm text-[var(--muted)]">
+            Best 4 of 12 combined golfers per side. Lower total wins.
+          </p>
+          <div className="overflow-x-auto border border-[var(--line)] bg-[var(--panel)]/80">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-[var(--line)] bg-[var(--surface)]">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">#</th>
+                  <th className="px-3 py-2 font-semibold">Side</th>
+                  <th className="px-3 py-2 font-semibold">Best 4</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaderboard.partnerships.map((side, index) => (
+                  <tr key={side.team_id} className="border-b border-[var(--line)]/70">
+                    <td className="px-3 py-2">{index + 1}</td>
+                    <td className="px-3 py-2">
+                      <p className="font-medium">{side.team_name}</p>
+                      <p className="text-xs text-[var(--muted)]">
+                        {side.member_names.join(" · ")}
+                      </p>
+                      <ul className="mt-2 space-y-0.5 text-xs text-[var(--muted)]">
+                        {side.players.map((p) => (
+                          <li key={p.player_id}>
+                            {p.player_name}: {formatScore(p.par_relative_score)}
+                            {side.counted_player_ids.includes(p.player_id) ? " · counts" : ""}
+                            {p.thru ? ` · thru ${p.thru}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                    <td className="px-3 py-2 font-semibold">
+                      {formatScore(side.best_four_total)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <section className="grid gap-8 lg:grid-cols-2">
         <div className="space-y-3">
-          <h2 className="font-[family-name:var(--font-display)] text-2xl">Team standings</h2>
+          <h2 className="font-[family-name:var(--font-display)] text-2xl">
+            Individual standings
+          </h2>
           <p className="text-sm text-[var(--muted)]">
             Best 4 of 6 from cached scores. Each player shows daily total.
           </p>

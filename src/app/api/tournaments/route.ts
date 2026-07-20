@@ -3,6 +3,11 @@ import { getDb } from "@/lib/db/client";
 import type { GolfTournament, Tournament } from "@/lib/db/types";
 import { syncTournamentField } from "@/lib/golf/syncTournamentField";
 import { error, handleRouteError, json, readJson } from "@/lib/http";
+import {
+  resolvePartnershipTeams,
+  validatePartnershipTeams,
+  type PartnershipTeamInput,
+} from "@/lib/teams";
 
 export async function GET(request: Request) {
   try {
@@ -25,6 +30,7 @@ interface CreateBody {
   year: string;
   name: string;
   draft_order?: string[];
+  partnership_teams?: PartnershipTeamInput[];
   sync_field?: boolean;
 }
 
@@ -44,6 +50,11 @@ export async function POST(request: Request) {
     if (draftOrder.length !== 4) {
       return error("draft_order must contain exactly 4 user ids");
     }
+
+    const teamValidation = validatePartnershipTeams(body.partnership_teams);
+    if (teamValidation) return error(teamValidation);
+
+    const partnershipTeams = resolvePartnershipTeams(body.partnership_teams);
 
     const tournId = body.external_tournament_id.trim();
     const year = body.year.trim();
@@ -73,6 +84,26 @@ export async function POST(request: Request) {
 
     const id = crypto.randomUUID();
 
+    const teamStatements = partnershipTeams.flatMap((team, index) => {
+      const teamId = crypto.randomUUID();
+      return [
+        db
+          .prepare(
+            `INSERT INTO tournament_teams (id, tournament_id, name, sort_order)
+             VALUES (?, ?, ?, ?)`,
+          )
+          .bind(teamId, id, team.name.trim(), index + 1),
+        ...team.member_ids.map((userId) =>
+          db
+            .prepare(
+              `INSERT INTO tournament_team_members (team_id, user_id)
+               VALUES (?, ?)`,
+            )
+            .bind(teamId, userId),
+        ),
+      ];
+    });
+
     const statements = [
       db
         .prepare(
@@ -94,6 +125,7 @@ export async function POST(request: Request) {
           )
           .bind(id, userId, index + 1),
       ),
+      ...teamStatements,
     ];
 
     await db.batch(statements);

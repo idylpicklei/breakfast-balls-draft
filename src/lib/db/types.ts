@@ -53,6 +53,18 @@ export interface Roster {
   pick_number: number;
 }
 
+export interface TournamentTeam {
+  id: string;
+  tournament_id: string;
+  name: string;
+  sort_order: number;
+}
+
+export interface TournamentTeamMember {
+  team_id: string;
+  user_id: string;
+}
+
 export interface AuthUser {
   id: string;
   name: string;

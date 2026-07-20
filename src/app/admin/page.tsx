@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
 import type { AuthUser, GolfTournament, Tournament } from "@/lib/db/types";
+import { DEFAULT_PARTNERSHIP_TEAMS } from "@/lib/teams";
 
 const DEFAULT_ORDER = ["MinJungKyu", "PaulHawk", "PigTank", "Dylpickle"];
 
@@ -19,6 +20,12 @@ export default function AdminPage() {
   const [selectedTournId, setSelectedTournId] = useState("");
   const [name, setName] = useState("");
   const [order, setOrder] = useState(DEFAULT_ORDER.join(", "));
+  const [idahoMembers, setIdahoMembers] = useState(
+    DEFAULT_PARTNERSHIP_TEAMS[0].member_ids.join(", "),
+  );
+  const [oregonMembers, setOregonMembers] = useState(
+    DEFAULT_PARTNERSHIP_TEAMS[1].member_ids.join(", "),
+  );
 
   async function loadCachedSchedule(scheduleYear: string) {
     const data = await apiFetch<{ tournaments: GolfTournament[] }>(
@@ -64,6 +71,23 @@ export default function AdminPage() {
         .map((s) => s.trim())
         .filter(Boolean);
 
+      const partnership_teams = [
+        {
+          name: "Idaho",
+          member_ids: idahoMembers
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        },
+        {
+          name: "Oregon",
+          member_ids: oregonMembers
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        },
+      ];
+
       const selected = cached.find((t) => t.id === selectedTournId);
 
       const data = await apiFetch<{ tournament: Tournament }>("/api/tournaments", {
@@ -73,6 +97,7 @@ export default function AdminPage() {
           external_tournament_id: selectedTournId,
           year,
           draft_order,
+          partnership_teams,
           sync_field: true,
         }),
       });
@@ -171,6 +196,31 @@ export default function AdminPage() {
             onChange={(e) => setOrder(e.target.value)}
           />
         </label>
+
+        <fieldset className="space-y-3 border border-[var(--line)] bg-[var(--surface)]/60 p-4">
+          <legend className="px-1 text-sm font-medium">2v2 partnership teams</legend>
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium">Idaho members</span>
+            <input
+              required
+              className="w-full border border-[var(--line)] bg-white px-3 py-2 font-mono text-xs"
+              value={idahoMembers}
+              onChange={(e) => setIdahoMembers(e.target.value)}
+            />
+          </label>
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium">Oregon members</span>
+            <input
+              required
+              className="w-full border border-[var(--line)] bg-white px-3 py-2 font-mono text-xs"
+              value={oregonMembers}
+              onChange={(e) => setOregonMembers(e.target.value)}
+            />
+          </label>
+          <p className="text-xs text-[var(--muted)]">
+            Best foursome uses the best 4 of 12 combined golfers per side.
+          </p>
+        </fieldset>
 
         {error && <p className="text-sm text-red-700">{error}</p>}
 

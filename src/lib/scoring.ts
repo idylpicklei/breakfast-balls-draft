@@ -18,6 +18,17 @@ export interface TeamStanding {
   counted_player_ids: string[];
 }
 
+export interface PartnershipStanding {
+  team_id: string;
+  team_name: string;
+  sort_order: number;
+  member_ids: string[];
+  member_names: string[];
+  best_four_total: number | null;
+  players: ScoredRosterPlayer[];
+  counted_player_ids: string[];
+}
+
 export interface BestSinglePlayer {
   player_id: string;
   player_name: string;
@@ -30,7 +41,15 @@ export interface LeaderboardPayload {
   tournament_id: string;
   round_status: string | null;
   teams: TeamStanding[];
+  partnerships: PartnershipStanding[];
   best_single_player: BestSinglePlayer | null;
+}
+
+export interface PartnershipTeamWithMembers {
+  id: string;
+  name: string;
+  sort_order: number;
+  member_ids: string[];
 }
 
 export function buildLeaderboard(
@@ -39,6 +58,7 @@ export function buildLeaderboard(
   rows: NormalizedLeaderboardRow[],
   tournamentId: string,
   roundStatus: string | null = null,
+  partnershipTeams: PartnershipTeamWithMembers[] = [],
 ): LeaderboardPayload {
   const scoreByPlayer = new Map<string, NormalizedLeaderboardRow>();
   for (const row of rows) {
@@ -115,6 +135,52 @@ export function buildLeaderboard(
     tournament_id: tournamentId,
     round_status: roundStatus,
     teams,
+    partnerships: buildPartnershipStandings(scored, users, partnershipTeams),
     best_single_player: bestSingle,
   };
+}
+
+export function buildPartnershipStandings(
+  scored: ScoredRosterPlayer[],
+  users: User[],
+  partnershipTeams: PartnershipTeamWithMembers[],
+): PartnershipStanding[] {
+  const userName = new Map(users.map((u) => [u.id, u.name]));
+
+  const standings: PartnershipStanding[] = partnershipTeams.map((team) => {
+    const memberSet = new Set(team.member_ids);
+    const pool = scored.filter((p) => memberSet.has(p.user_id));
+    const ranked = [...pool]
+      .filter((p) => p.par_relative_score != null)
+      .sort((a, b) => (a.par_relative_score as number) - (b.par_relative_score as number));
+
+    const top4 = ranked.slice(0, 4);
+    const bestFourTotal =
+      top4.length === 4
+        ? top4.reduce((sum, p) => sum + (p.par_relative_score as number), 0)
+        : null;
+
+    return {
+      team_id: team.id,
+      team_name: team.name,
+      sort_order: team.sort_order,
+      member_ids: team.member_ids,
+      member_names: team.member_ids.map((id) => userName.get(id) ?? id),
+      best_four_total: bestFourTotal,
+      players: pool.sort((a, b) => a.pick_number - b.pick_number),
+      counted_player_ids: top4.map((p) => p.player_id),
+    };
+  });
+
+  standings.sort((a, b) => {
+    if (a.best_four_total == null && b.best_four_total == null) return a.sort_order - b.sort_order;
+    if (a.best_four_total == null) return 1;
+    if (b.best_four_total == null) return -1;
+    if (a.best_four_total !== b.best_four_total) {
+      return a.best_four_total - b.best_four_total;
+    }
+    return a.sort_order - b.sort_order;
+  });
+
+  return standings;
 }
