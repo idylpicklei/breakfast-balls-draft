@@ -379,17 +379,15 @@ export default function ScoreboardPage() {
             </tbody>
           </table>
         </div>
-        {me?.is_admin && (
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={copyScoreboard}
-              className="text-xs text-[var(--muted)] underline-offset-2 hover:text-[var(--ink)] hover:underline"
-            >
-              {copied ? "Copied!" : "Copy scoreboard"}
-            </button>
-          </div>
-        )}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={copyScoreboard}
+            className="text-xs text-[var(--muted)] underline-offset-2 hover:text-[var(--ink)] hover:underline"
+          >
+            {copied ? "Copied!" : "Copy scoreboard"}
+          </button>
+        </div>
       </section>
     </div>
   );
