@@ -275,3 +275,38 @@ export async function PATCH(request: Request, { params }: Params) {
     return handleRouteError(err);
   }
 }
+
+export async function DELETE(request: Request, { params }: Params) {
+  try {
+    await requireAdmin(request);
+    const { id } = await params;
+    const db = await getDb();
+
+    const tournament = await db
+      .prepare("SELECT id, name FROM tournaments WHERE id = ?")
+      .bind(id)
+      .first<{ id: string; name: string }>();
+
+    if (!tournament) return error("Tournament not found", 404);
+
+    await db.batch([
+      db.prepare("DELETE FROM draft_queues WHERE tournament_id = ?").bind(id),
+      db.prepare("DELETE FROM draft_user_settings WHERE tournament_id = ?").bind(id),
+      db.prepare("DELETE FROM rosters WHERE tournament_id = ?").bind(id),
+      db.prepare("DELETE FROM draft_order WHERE tournament_id = ?").bind(id),
+      db
+        .prepare(
+          `DELETE FROM tournament_team_members
+           WHERE team_id IN (SELECT id FROM tournament_teams WHERE tournament_id = ?)`,
+        )
+        .bind(id),
+      db.prepare("DELETE FROM tournament_teams WHERE tournament_id = ?").bind(id),
+      db.prepare("DELETE FROM draft_sessions WHERE tournament_id = ?").bind(id),
+      db.prepare("DELETE FROM tournaments WHERE id = ?").bind(id),
+    ]);
+
+    return json({ ok: true, deleted_id: id, name: tournament.name });
+  } catch (err) {
+    return handleRouteError(err);
+  }
+}

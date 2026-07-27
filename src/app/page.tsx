@@ -70,18 +70,28 @@ export default function HomePage() {
                 </p>
               </div>
               <div className="flex gap-2">
-                <Link
-                  href={`/tournaments/${t.id}/draft`}
-                  className="border border-[var(--line)] px-3 py-1.5 text-sm hover:bg-[var(--accent-soft)]"
-                >
-                  Draft
-                </Link>
+                {t.status !== "COMPLETED" && (
+                  <Link
+                    href={`/tournaments/${t.id}/draft`}
+                    className="border border-[var(--line)] px-3 py-1.5 text-sm hover:bg-[var(--accent-soft)]"
+                  >
+                    Draft
+                  </Link>
+                )}
                 <Link
                   href={`/tournaments/${t.id}`}
                   className="bg-[var(--ink)] px-3 py-1.5 text-sm text-white hover:bg-[var(--accent)]"
                 >
                   Scoreboard
                 </Link>
+                {me?.is_admin && (
+                  <Link
+                    href={`/tournaments/${t.id}/edit`}
+                    className="border border-[var(--line)] px-3 py-1.5 text-sm hover:bg-[var(--accent-soft)]"
+                  >
+                    Edit
+                  </Link>
+                )}
               </div>
             </li>
           ))}

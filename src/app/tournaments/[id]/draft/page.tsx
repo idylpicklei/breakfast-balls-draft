@@ -430,6 +430,14 @@ export default function DraftPage() {
           >
             Scoreboard
           </Link>
+          {me?.is_admin && (
+            <Link
+              href={`/tournaments/${tournamentId}/edit`}
+              className="border border-[var(--line)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
+            >
+              Edit
+            </Link>
+          )}
         </div>
       </div>
 

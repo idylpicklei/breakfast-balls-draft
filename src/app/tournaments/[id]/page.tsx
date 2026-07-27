@@ -199,12 +199,22 @@ export default function ScoreboardPage() {
               {refreshing ? "Refreshing…" : "Refresh scores"}
             </button>
           )}
-          <Link
-            href={`/tournaments/${params.id}/draft`}
-            className="border border-[var(--line)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
-          >
-            Draft board
-          </Link>
+          {tournament.status !== "COMPLETED" && (
+            <Link
+              href={`/tournaments/${params.id}/draft`}
+              className="border border-[var(--line)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
+            >
+              Draft
+            </Link>
+          )}
+          {me?.is_admin && (
+            <Link
+              href={`/tournaments/${params.id}/edit`}
+              className="border border-[var(--line)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
+            >
+              Edit
+            </Link>
+          )}
         </div>
       </div>
 
