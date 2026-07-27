@@ -23,23 +23,30 @@ export async function GET(request: Request) {
     const like = `%${q}%`;
     const { results } = await db
       .prepare(
-        `SELECT p.id, p.first_name, p.last_name, p.status
+        `SELECT p.id, p.first_name, p.last_name, p.status, r.rank AS fedex_rank
          FROM golf_players p
          JOIN golf_tournament_field f ON f.player_id = p.id
+         LEFT JOIN golf_fedex_rankings r
+           ON r.player_id = p.id AND r.year = ?
          WHERE f.tournament_id = ?
            AND (p.first_name LIKE ? OR p.last_name LIKE ?
                 OR (p.first_name || ' ' || p.last_name) LIKE ?)
-         ORDER BY p.last_name ASC, p.first_name ASC
+         ORDER BY
+           CASE WHEN r.rank IS NULL THEN 1 ELSE 0 END,
+           r.rank ASC,
+           p.last_name ASC,
+           p.first_name ASC
          LIMIT 25`,
       )
-      .bind(tournId, like, like, like)
-      .all<GolfPlayer>();
+      .bind(year, tournId, like, like, like)
+      .all<GolfPlayer & { fedex_rank: number | null }>();
 
     return json({
       players: (results ?? []).map((p) => ({
         id: p.id,
         name: golfPlayerName(p),
         status: p.status,
+        fedex_rank: p.fedex_rank,
       })),
     });
   } catch (err) {

@@ -46,6 +46,35 @@ export interface LeaderboardResponse {
   leaderboardRows?: LeaderboardRow[];
 }
 
+export interface StatsRow {
+  playerId?: string;
+  firstName?: string;
+  lastName?: string;
+  rank?: string | number | { $numberInt?: string | number };
+  ranking?: string | number | { $numberInt?: string | number };
+  position?: string | number | { $numberInt?: string | number };
+  rankOrder?: string | number | { $numberInt?: string | number };
+}
+
+export interface StatsResponse {
+  year?: string;
+  statId?: string;
+  statName?: string;
+  name?: string;
+  rankings?: StatsRow[];
+  rows?: StatsRow[];
+  stats?: StatsRow[];
+  statsRows?: StatsRow[];
+  statRows?: StatsRow[];
+  leaderboard?: StatsRow[];
+  players?: StatsRow[];
+}
+
+export interface NormalizedFedExRanking {
+  playerId: string;
+  rank: number;
+}
+
 export interface NormalizedLeaderboardRow {
   playerId: string;
   firstName: string;

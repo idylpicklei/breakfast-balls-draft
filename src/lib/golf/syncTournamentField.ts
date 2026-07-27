@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db/client";
 import { PGA_ORG_ID, rapidFetch } from "@/lib/golf/client";
+import { syncFedExRankings } from "@/lib/golf/syncFedExRankings";
 import type { TournamentResponse } from "@/lib/golf/types";
 
 export interface SyncTournamentFieldResult {
@@ -78,6 +79,15 @@ export async function syncTournamentField(
   console.log(
     `[syncTournamentField] Synced ${playerCount} players for ${tournId} (${year})`,
   );
+
+  try {
+    await syncFedExRankings(year);
+  } catch (err) {
+    console.error(
+      `[syncTournamentField] FedEx ranking sync failed for ${year}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
 
   return {
     tournId,

@@ -10,6 +10,7 @@ interface PlayerHit {
   id: string;
   name: string;
   status?: string | null;
+  fedex_rank?: number | null;
 }
 
 interface DraftPayload {
@@ -300,6 +301,9 @@ export default function DraftPage() {
                   className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
                 >
                   <span>
+                    {p.fedex_rank != null ? (
+                      <span className="mr-2 font-medium text-[var(--muted)]">#{p.fedex_rank}</span>
+                    ) : null}
                     {p.name}
                     {p.status ? (
                       <span className="ml-2 text-xs uppercase tracking-wide text-[var(--muted)]">

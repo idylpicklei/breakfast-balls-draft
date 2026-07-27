@@ -57,17 +57,23 @@ export async function GET(request: Request, { params }: Params) {
 
     const { results: fieldPlayers } = await db
       .prepare(
-        `SELECT p.id, p.first_name, p.last_name, p.status
+        `SELECT p.id, p.first_name, p.last_name, p.status, r.rank AS fedex_rank
          FROM golf_players p
          JOIN golf_tournament_field f ON f.player_id = p.id
+         LEFT JOIN golf_fedex_rankings r
+           ON r.player_id = p.id AND r.year = ?
          WHERE f.tournament_id = ?
            AND p.id NOT IN (
              SELECT player_id FROM rosters WHERE tournament_id = ?
            )
-         ORDER BY p.last_name ASC, p.first_name ASC`,
+         ORDER BY
+           CASE WHEN r.rank IS NULL THEN 1 ELSE 0 END,
+           r.rank ASC,
+           p.last_name ASC,
+           p.first_name ASC`,
       )
-      .bind(tournament.external_tournament_id, tournamentId)
-      .all<GolfPlayer>();
+      .bind(tournament.year, tournament.external_tournament_id, tournamentId)
+      .all<GolfPlayer & { fedex_rank: number | null }>();
 
     const activeUserId =
       session.draft_status === "LIVE" && session.current_pick <= TOTAL_PICKS
@@ -83,6 +89,7 @@ export async function GET(request: Request, { params }: Params) {
         id: p.id,
         name: golfPlayerName(p),
         status: p.status,
+        fedex_rank: p.fedex_rank,
       })),
       active_user_id: activeUserId,
       total_picks: TOTAL_PICKS,
