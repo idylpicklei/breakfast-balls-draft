@@ -55,6 +55,64 @@ export interface PickAdvanceResult {
   player_id: string;
   player_name: string;
   auto_picked: boolean;
+  from_queue?: boolean;
+}
+
+export async function pruneDraftQueues(tournamentId: string, playerId?: string): Promise<void> {
+  const db = await getDb();
+  if (playerId) {
+    await db
+      .prepare("DELETE FROM draft_queues WHERE tournament_id = ? AND player_id = ?")
+      .bind(tournamentId, playerId.trim())
+      .run();
+  }
+  await db
+    .prepare(
+      `DELETE FROM draft_queues
+       WHERE tournament_id = ?
+         AND player_id IN (
+           SELECT player_id FROM rosters WHERE tournament_id = ?
+         )`,
+    )
+    .bind(tournamentId, tournamentId)
+    .run();
+}
+
+export async function selectQueuedOrBestPlayer(
+  tournamentId: string,
+  userId: string,
+  externalTournamentId: string,
+  year: string,
+): Promise<{ id: string; name: string; from_queue: boolean } | null> {
+  const db = await getDb();
+  const queued = await db
+    .prepare(
+      `SELECT q.player_id, p.first_name, p.last_name
+       FROM draft_queues q
+       JOIN golf_players p ON p.id = q.player_id
+       JOIN golf_tournament_field f ON f.player_id = p.id AND f.tournament_id = ?
+       WHERE q.tournament_id = ?
+         AND q.user_id = ?
+         AND q.player_id NOT IN (
+           SELECT player_id FROM rosters WHERE tournament_id = ?
+         )
+       ORDER BY q.sort_order ASC
+       LIMIT 1`,
+    )
+    .bind(externalTournamentId, tournamentId, userId, tournamentId)
+    .first<{ player_id: string; first_name: string; last_name: string }>();
+
+  if (queued) {
+    return {
+      id: queued.player_id,
+      name: golfPlayerName(queued),
+      from_queue: true,
+    };
+  }
+
+  const best = await selectBestAvailablePlayer(tournamentId, externalTournamentId, year);
+  if (!best) return null;
+  return { ...best, from_queue: false };
 }
 
 export async function selectBestAvailablePlayer(
@@ -95,6 +153,7 @@ export async function advanceDraftPick(input: {
   playerName: string;
   pickClockSeconds: number;
   autoPicked?: boolean;
+  fromQueue?: boolean;
 }): Promise<PickAdvanceResult> {
   const db = await getDb();
   const session = await db
@@ -151,6 +210,7 @@ export async function advanceDraftPick(input: {
     }
 
     await db.batch(statements);
+    await pruneDraftQueues(input.tournamentId, input.playerId.trim());
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (message.toLowerCase().includes("unique")) {
@@ -169,5 +229,6 @@ export async function advanceDraftPick(input: {
     player_id: input.playerId.trim(),
     player_name: input.playerName.trim(),
     auto_picked: input.autoPicked ?? false,
+    from_queue: input.fromQueue ?? false,
   };
 }

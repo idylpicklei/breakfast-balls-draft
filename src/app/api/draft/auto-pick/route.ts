@@ -1,13 +1,13 @@
 import { requireAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db/client";
-import type { DraftOrder, DraftSession, Tournament } from "@/lib/db/types";
+import type { DraftOrder, DraftSession, DraftUserSettings, Tournament } from "@/lib/db/types";
 import {
   DEFAULT_PICK_CLOCK_SECONDS,
   advanceDraftPick,
   ensureLivePickDeadline,
   isDeadlinePassed,
   normalizePickClockSeconds,
-  selectBestAvailablePlayer,
+  selectQueuedOrBestPlayer,
 } from "@/lib/draft/pickAdvance";
 import { getUserIdAtPick } from "@/lib/snake";
 import { TOTAL_PICKS } from "@/lib/status";
@@ -15,6 +15,7 @@ import { error, handleRouteError, json, readJson } from "@/lib/http";
 
 interface AutoPickBody {
   tournamentId: string;
+  reason?: "deadline" | "autodraft";
 }
 
 export async function POST(request: Request) {
@@ -24,6 +25,11 @@ export async function POST(request: Request) {
 
     if (!body.tournamentId) {
       return error("tournamentId is required");
+    }
+
+    const reason = body.reason ?? "deadline";
+    if (reason !== "deadline" && reason !== "autodraft") {
+      return error("reason must be deadline or autodraft");
     }
 
     const db = await getDb();
@@ -58,15 +64,6 @@ export async function POST(request: Request) {
       return json({ skipped: true, reason: "complete" });
     }
 
-    if (!session.pick_deadline_at) {
-      const deadline = await ensureLivePickDeadline(body.tournamentId, pickClockSeconds);
-      session = { ...session, pick_deadline_at: deadline };
-    }
-
-    if (!session.pick_deadline_at || !isDeadlinePassed(session.pick_deadline_at)) {
-      return json({ skipped: true, reason: "deadline_not_passed" });
-    }
-
     const { results: orderRows } = await db
       .prepare(
         `SELECT tournament_id, user_id, pick_position
@@ -83,12 +80,37 @@ export async function POST(request: Request) {
       return error("Could not resolve active seat", 500);
     }
 
-    const best = await selectBestAvailablePlayer(
+    if (reason === "deadline") {
+      if (!session.pick_deadline_at) {
+        const deadline = await ensureLivePickDeadline(body.tournamentId, pickClockSeconds);
+        session = { ...session, pick_deadline_at: deadline };
+      }
+
+      if (!session.pick_deadline_at || !isDeadlinePassed(session.pick_deadline_at)) {
+        return json({ skipped: true, reason: "deadline_not_passed" });
+      }
+    } else {
+      const settings = await db
+        .prepare(
+          `SELECT autodraft_enabled
+           FROM draft_user_settings
+           WHERE tournament_id = ? AND user_id = ?`,
+        )
+        .bind(body.tournamentId, activeUserId)
+        .first<DraftUserSettings>();
+
+      if (!settings?.autodraft_enabled) {
+        return json({ skipped: true, reason: "autodraft_disabled" });
+      }
+    }
+
+    const pick = await selectQueuedOrBestPlayer(
       body.tournamentId,
+      activeUserId,
       tournament.external_tournament_id,
       tournament.year,
     );
-    if (!best) {
+    if (!pick) {
       return error("No available players to auto-pick", 409);
     }
 
@@ -96,10 +118,11 @@ export async function POST(request: Request) {
       const result = await advanceDraftPick({
         tournamentId: body.tournamentId,
         userId: activeUserId,
-        playerId: best.id,
-        playerName: best.name,
+        playerId: pick.id,
+        playerName: pick.name,
         pickClockSeconds,
         autoPicked: true,
+        fromQueue: pick.from_queue,
       });
       return json(result);
     } catch (err) {

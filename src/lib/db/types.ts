@@ -47,6 +47,19 @@ export interface DraftOrder {
   pick_position: number;
 }
 
+export interface DraftQueueEntry {
+  tournament_id: string;
+  user_id: string;
+  player_id: string;
+  sort_order: number;
+}
+
+export interface DraftUserSettings {
+  tournament_id: string;
+  user_id: string;
+  autodraft_enabled: number | boolean;
+}
+
 export interface Roster {
   tournament_id: string;
   user_id: string;

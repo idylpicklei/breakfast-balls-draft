@@ -13,6 +13,12 @@ interface PlayerHit {
   fedex_rank?: number | null;
 }
 
+interface QueueEntry {
+  player_id: string;
+  sort_order: number;
+  name: string;
+}
+
 interface DraftPayload {
   tournament: Tournament;
   draft_session: DraftSession;
@@ -24,6 +30,8 @@ interface DraftPayload {
   picks_remaining: number;
   pick_clock_seconds?: number;
   pick_deadline_at?: string | null;
+  my_queue?: QueueEntry[];
+  autodraft_enabled?: boolean;
 }
 
 interface AutoPickResult {
@@ -32,6 +40,7 @@ interface AutoPickResult {
   auto_picked?: boolean;
   player_name?: string;
   user_id?: string;
+  from_queue?: boolean;
 }
 
 const LIVE_POLL_MS = 2000;
@@ -64,36 +73,43 @@ export default function DraftPage() {
   const [turnFlash, setTurnFlash] = useState(false);
   const [clockLabel, setClockLabel] = useState<string | null>(null);
   const [autoPickMessage, setAutoPickMessage] = useState<string | null>(null);
+  const [autodraftEnabled, setAutodraftEnabled] = useState(false);
 
   const prevActiveRef = useRef<string | null>(null);
   const prevPickCountRef = useRef(0);
   const autoPickInFlightRef = useRef(false);
+  const autodraftTurnRef = useRef<number | null>(null);
 
   const refreshDraft = useCallback(async () => {
     const data = await apiFetch<DraftPayload>(`/api/draft/${tournamentId}`);
     setDraft(data);
+    setAutodraftEnabled(Boolean(data.autodraft_enabled));
     return data;
   }, [tournamentId]);
 
-  const triggerAutoPick = useCallback(async () => {
-    if (autoPickInFlightRef.current) return;
-    autoPickInFlightRef.current = true;
-    try {
-      const result = await apiFetch<AutoPickResult>("/api/draft/auto-pick", {
-        method: "POST",
-        body: JSON.stringify({ tournamentId }),
-      });
-      if (result.ok && result.auto_picked && result.player_name) {
-        setAutoPickMessage(`Auto-picked ${result.player_name}.`);
-        window.setTimeout(() => setAutoPickMessage(null), 4000);
+  const triggerAutoPick = useCallback(
+    async (reason: "deadline" | "autodraft") => {
+      if (autoPickInFlightRef.current) return;
+      autoPickInFlightRef.current = true;
+      try {
+        const result = await apiFetch<AutoPickResult>("/api/draft/auto-pick", {
+          method: "POST",
+          body: JSON.stringify({ tournamentId, reason }),
+        });
+        if (result.ok && result.auto_picked && result.player_name) {
+          const source = result.from_queue ? "from queue" : "best FedEx available";
+          setAutoPickMessage(`Auto-picked ${result.player_name} (${source}).`);
+          window.setTimeout(() => setAutoPickMessage(null), 4000);
+        }
+        await refreshDraft();
+      } catch {
+        // Next poll or timer tick will retry.
+      } finally {
+        autoPickInFlightRef.current = false;
       }
-      await refreshDraft();
-    } catch {
-      // Next poll or timer tick will retry.
-    } finally {
-      autoPickInFlightRef.current = false;
-    }
-  }, [refreshDraft, tournamentId]);
+    },
+    [refreshDraft, tournamentId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +122,7 @@ export default function DraftPage() {
         if (cancelled) return;
         setMe(user);
         setDraft(data);
+        setAutodraftEnabled(Boolean(data.autodraft_enabled));
         prevActiveRef.current = data.active_user_id;
         prevPickCountRef.current = data.rosters.length;
       } catch (err) {
@@ -130,7 +147,7 @@ export default function DraftPage() {
     const update = () => {
       setClockLabel(formatCountdown(pickDeadline));
       if (isDeadlineExpired(pickDeadline)) {
-        void triggerAutoPick();
+        void triggerAutoPick("deadline");
       }
     };
 
@@ -138,6 +155,20 @@ export default function DraftPage() {
     const timer = window.setInterval(update, 250);
     return () => window.clearInterval(timer);
   }, [draftStatus, pickDeadline, triggerAutoPick]);
+
+  const isMyTurn =
+    !!draft &&
+    !!me &&
+    draft.draft_session.draft_status === "LIVE" &&
+    draft.active_user_id === me.id;
+
+  useEffect(() => {
+    if (!isMyTurn || !autodraftEnabled || !draft) return;
+    const currentPick = draft.draft_session.current_pick;
+    if (autodraftTurnRef.current === currentPick) return;
+    autodraftTurnRef.current = currentPick;
+    void triggerAutoPick("autodraft");
+  }, [autodraftEnabled, draft, isMyTurn, triggerAutoPick]);
 
   // Poll while the draft room is open so other seats see picks / turn changes.
   useEffect(() => {
@@ -177,7 +208,7 @@ export default function DraftPage() {
           data.draft_session.draft_status === "LIVE" &&
           isDeadlineExpired(deadline)
         ) {
-          void triggerAutoPick();
+          void triggerAutoPick("deadline");
         }
 
         if (
@@ -208,11 +239,10 @@ export default function DraftPage() {
     };
   }, [draftStatus, me?.id, refreshDraft, triggerAutoPick]);
 
-  const isMyTurn =
-    !!draft &&
-    !!me &&
-    draft.draft_session.draft_status === "LIVE" &&
-    draft.active_user_id === me.id;
+  const queuedIds = useMemo(
+    () => new Set((draft?.my_queue ?? []).map((q) => q.player_id)),
+    [draft?.my_queue],
+  );
 
   const filteredPlayers = useMemo(() => {
     const players = draft?.available_players ?? [];
@@ -231,6 +261,56 @@ export default function DraftPage() {
       await refreshDraft();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleAutodraft() {
+    const next = !autodraftEnabled;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiFetch("/api/draft/autodraft", {
+        method: "POST",
+        body: JSON.stringify({ tournamentId, enabled: next }),
+      });
+      setAutodraftEnabled(next);
+      if (next) autodraftTurnRef.current = null;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update autodraft");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function queuePlayer(playerId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiFetch("/api/draft/queue", {
+        method: "POST",
+        body: JSON.stringify({ tournamentId, playerId }),
+      });
+      await refreshDraft();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to queue player");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function unqueuePlayer(playerId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await apiFetch("/api/draft/queue", {
+        method: "DELETE",
+        body: JSON.stringify({ tournamentId, playerId }),
+      });
+      await refreshDraft();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove from queue");
     } finally {
       setBusy(false);
     }
@@ -263,6 +343,7 @@ export default function DraftPage() {
   const showField =
     draft_session.draft_status === "PENDING" || draft_session.draft_status === "LIVE";
   const liveUpdating = draft_session.draft_status !== "FINISHED";
+  const canQueue = draft_session.draft_status === "LIVE";
 
   return (
     <div className="space-y-8">
@@ -286,7 +367,7 @@ export default function DraftPage() {
               </span>
             ) : null}
           </p>
-          {isMyTurn && (
+          {isMyTurn && !autodraftEnabled && (
             <p
               className={`mt-2 text-sm font-semibold text-[var(--accent)] ${
                 turnFlash ? "animate-pulse" : ""
@@ -295,8 +376,27 @@ export default function DraftPage() {
               You’re on the clock — pick a player below.
             </p>
           )}
+          {isMyTurn && autodraftEnabled && (
+            <p className="mt-2 text-sm font-semibold text-[var(--accent)]">
+              Autodraft is on — picking from your queue or best FedEx.
+            </p>
+          )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {canQueue && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={toggleAutodraft}
+              className={`border px-4 py-2 text-sm disabled:opacity-50 ${
+                autodraftEnabled
+                  ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                  : "border-[var(--line)] hover:bg-[var(--accent-soft)]"
+              }`}
+            >
+              Autodraft {autodraftEnabled ? "ON" : "OFF"}
+            </button>
+          )}
           {draft_session.draft_status === "PENDING" && me?.is_admin && (
             <button
               onClick={startDraft}
@@ -318,6 +418,18 @@ export default function DraftPage() {
       {error && <p className="text-sm text-red-700">{error}</p>}
       {autoPickMessage && (
         <p className="text-sm font-medium text-[var(--accent)]">{autoPickMessage}</p>
+      )}
+
+      {(draft.my_queue?.length ?? 0) > 0 && (
+        <p className="text-sm text-[var(--muted)]">
+          Your queue:{" "}
+          {(draft.my_queue ?? []).map((q, index) => (
+            <span key={q.player_id}>
+              {index > 0 ? " → " : ""}
+              {q.name}
+            </span>
+          ))}
+        </p>
       )}
 
       <section className="grid gap-3 md:grid-cols-4">
@@ -358,7 +470,8 @@ export default function DraftPage() {
               <p className="mt-1 text-sm text-[var(--muted)]">
                 {draft.available_players.length} undrafted
                 {query.trim() ? ` · ${filteredPlayers.length} match filter` : null}
-                {isMyTurn ? " · Your pick — draft from the list" : null}
+                {isMyTurn && !autodraftEnabled ? " · Your pick — draft from the list" : null}
+                {canQueue ? " · Queue players while you wait" : null}
               </p>
             </div>
             <input
@@ -378,33 +491,64 @@ export default function DraftPage() {
             <p className="text-sm text-[var(--muted)]">No players match “{query.trim()}”.</p>
           ) : (
             <ul className="max-h-[28rem] divide-y divide-[var(--line)] overflow-y-auto border border-[var(--line)] bg-white/60">
-              {filteredPlayers.map((p) => (
-                <li
-                  key={p.id}
-                  className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-                >
-                  <span>
-                    {p.fedex_rank != null ? (
-                      <span className="mr-2 font-medium text-[var(--muted)]">#{p.fedex_rank}</span>
-                    ) : null}
-                    {p.name}
-                    {p.status ? (
-                      <span className="ml-2 text-xs uppercase tracking-wide text-[var(--muted)]">
-                        {p.status}
-                      </span>
-                    ) : null}
-                  </span>
-                  {isMyTurn ? (
-                    <button
-                      disabled={busy}
-                      onClick={() => makePick(p.id, p.name)}
-                      className="shrink-0 bg-[var(--accent)] px-3 py-1 text-sm text-white disabled:opacity-50"
-                    >
-                      Draft
-                    </button>
-                  ) : null}
-                </li>
-              ))}
+              {filteredPlayers.map((p) => {
+                const queued = queuedIds.has(p.id);
+                return (
+                  <li
+                    key={p.id}
+                    className={`flex items-center justify-between gap-3 px-3 py-2 text-sm ${
+                      queued ? "bg-[var(--accent-soft)]/40" : ""
+                    }`}
+                  >
+                    <span>
+                      {queued ? (
+                        <span className="mr-2 text-xs font-semibold uppercase tracking-wide text-[var(--accent)]">
+                          Queued
+                        </span>
+                      ) : null}
+                      {p.fedex_rank != null ? (
+                        <span className="mr-2 font-medium text-[var(--muted)]">#{p.fedex_rank}</span>
+                      ) : null}
+                      {p.name}
+                      {p.status ? (
+                        <span className="ml-2 text-xs uppercase tracking-wide text-[var(--muted)]">
+                          {p.status}
+                        </span>
+                      ) : null}
+                    </span>
+                    <div className="flex shrink-0 gap-2">
+                      {canQueue && (
+                        queued ? (
+                          <button
+                            disabled={busy}
+                            onClick={() => unqueuePlayer(p.id)}
+                            className="border border-[var(--line)] px-3 py-1 text-sm hover:bg-[var(--accent-soft)] disabled:opacity-50"
+                          >
+                            Unqueue
+                          </button>
+                        ) : (
+                          <button
+                            disabled={busy}
+                            onClick={() => queuePlayer(p.id)}
+                            className="border border-[var(--line)] px-3 py-1 text-sm hover:bg-[var(--accent-soft)] disabled:opacity-50"
+                          >
+                            Queue
+                          </button>
+                        )
+                      )}
+                      {isMyTurn && !autodraftEnabled ? (
+                        <button
+                          disabled={busy}
+                          onClick={() => makePick(p.id, p.name)}
+                          className="bg-[var(--accent)] px-3 py-1 text-sm text-white disabled:opacity-50"
+                        >
+                          Draft
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
