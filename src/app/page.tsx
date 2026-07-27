@@ -70,7 +70,7 @@ export default function HomePage() {
                 </p>
               </div>
               <div className="flex gap-2">
-                {t.status !== "COMPLETED" && (
+                {(t.status === "SCHEDULED" || t.status === "DRAFTING") && (
                   <Link
                     href={`/tournaments/${t.id}/draft`}
                     className="border border-[var(--line)] px-3 py-1.5 text-sm hover:bg-[var(--accent-soft)]"

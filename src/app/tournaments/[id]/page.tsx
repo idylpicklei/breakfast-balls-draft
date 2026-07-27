@@ -199,7 +199,7 @@ export default function ScoreboardPage() {
               {refreshing ? "Refreshing…" : "Refresh scores"}
             </button>
           )}
-          {tournament.status !== "COMPLETED" && (
+          {(tournament.status === "SCHEDULED" || tournament.status === "DRAFTING") && (
             <Link
               href={`/tournaments/${params.id}/draft`}
               className="border border-[var(--line)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"

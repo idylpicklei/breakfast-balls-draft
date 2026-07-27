@@ -148,7 +148,8 @@ export default function EditTournamentPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          {detail?.tournament.status !== "COMPLETED" && (
+          {(detail?.tournament.status === "SCHEDULED" ||
+            detail?.tournament.status === "DRAFTING") && (
             <Link
               href={`/tournaments/${tournamentId}/draft`}
               className="border border-[var(--line)] px-4 py-2 text-sm hover:bg-[var(--accent-soft)]"
