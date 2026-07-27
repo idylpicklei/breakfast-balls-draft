@@ -357,9 +357,6 @@ export default function DraftPage() {
             Status: {draft_session.draft_status} · Pick{" "}
             {Math.min(draft_session.current_pick, draft.total_picks)} / {draft.total_picks}
             {active_user_id ? ` · On the clock: ${activeName}` : null}
-            {draft_session.draft_status === "LIVE" && clockLabel ? (
-              <span className="ml-2 font-mono text-[var(--ink)]">· {clockLabel}</span>
-            ) : null}
             {liveUpdating ? (
               <span className="ml-2 inline-flex items-center gap-1 text-xs text-[var(--accent)]">
                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
@@ -367,6 +364,26 @@ export default function DraftPage() {
               </span>
             ) : null}
           </p>
+          {draft_session.draft_status === "LIVE" && clockLabel ? (
+            <div
+              className={`mt-4 inline-flex items-center gap-3 border-2 px-5 py-3 ${
+                clockLabel === "0:00"
+                  ? "animate-pulse border-red-600 bg-red-50"
+                  : "border-[var(--accent)] bg-[var(--accent-soft)]"
+              }`}
+            >
+              <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">
+                Pick clock
+              </span>
+              <span
+                className={`font-mono text-5xl font-bold leading-none tabular-nums ${
+                  clockLabel === "0:00" ? "text-red-700" : "text-[var(--ink)]"
+                }`}
+              >
+                {clockLabel}
+              </span>
+            </div>
+          ) : null}
           {isMyTurn && !autodraftEnabled && (
             <p
               className={`mt-2 text-sm font-semibold text-[var(--accent)] ${
@@ -388,13 +405,14 @@ export default function DraftPage() {
               type="button"
               disabled={busy}
               onClick={toggleAutodraft}
-              className={`border px-4 py-2 text-sm disabled:opacity-50 ${
+              aria-pressed={autodraftEnabled}
+              className={`px-5 py-2.5 text-sm font-bold transition disabled:opacity-50 ${
                 autodraftEnabled
-                  ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                  : "border-[var(--line)] hover:bg-[var(--accent-soft)]"
+                  ? "bg-[var(--accent)] text-white shadow-lg ring-2 ring-[var(--accent)] ring-offset-2"
+                  : "border border-[var(--line)] bg-white hover:bg-[var(--accent-soft)]"
               }`}
             >
-              Autodraft {autodraftEnabled ? "ON" : "OFF"}
+              {autodraftEnabled ? "✓ Autodraft ON" : "Autodraft OFF"}
             </button>
           )}
           {draft_session.draft_status === "PENDING" && me?.is_admin && (
