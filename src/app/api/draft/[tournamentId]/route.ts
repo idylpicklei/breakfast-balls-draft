@@ -2,6 +2,11 @@ import { requireAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db/client";
 import type { DraftOrder, DraftSession, GolfPlayer, Roster, Tournament } from "@/lib/db/types";
 import { golfPlayerName } from "@/lib/db/types";
+import {
+  DEFAULT_PICK_CLOCK_SECONDS,
+  ensureLivePickDeadline,
+  normalizePickClockSeconds,
+} from "@/lib/draft/pickAdvance";
 import { getUserIdAtPick } from "@/lib/snake";
 import { TOTAL_PICKS } from "@/lib/status";
 import { error, handleRouteError, json } from "@/lib/http";
@@ -16,7 +21,7 @@ export async function GET(request: Request, { params }: Params) {
 
     const tournament = await db
       .prepare(
-        `SELECT id, external_tournament_id, year, name, status, created_at
+        `SELECT id, external_tournament_id, year, name, status, pick_clock_seconds, created_at
          FROM tournaments WHERE id = ?`,
       )
       .bind(tournamentId)
@@ -24,14 +29,24 @@ export async function GET(request: Request, { params }: Params) {
 
     if (!tournament) return error("Tournament not found", 404);
 
-    const session = await db
+    const pickClockSeconds = normalizePickClockSeconds(
+      tournament.pick_clock_seconds ?? DEFAULT_PICK_CLOCK_SECONDS,
+    );
+
+    let session = await db
       .prepare(
-        "SELECT tournament_id, current_pick, draft_status FROM draft_sessions WHERE tournament_id = ?",
+        `SELECT tournament_id, current_pick, draft_status, pick_deadline_at
+         FROM draft_sessions WHERE tournament_id = ?`,
       )
       .bind(tournamentId)
       .first<DraftSession>();
 
     if (!session) return error("Draft session not found", 404);
+
+    if (session.draft_status === "LIVE" && !session.pick_deadline_at) {
+      const deadline = await ensureLivePickDeadline(tournamentId, pickClockSeconds);
+      session = { ...session, pick_deadline_at: deadline };
+    }
 
     const { results: orderRows } = await db
       .prepare(
@@ -81,7 +96,7 @@ export async function GET(request: Request, { params }: Params) {
         : null;
 
     return json({
-      tournament,
+      tournament: { ...tournament, pick_clock_seconds: pickClockSeconds },
       draft_session: session,
       draft_order: orderRows ?? [],
       rosters: rosters ?? [],
@@ -94,6 +109,8 @@ export async function GET(request: Request, { params }: Params) {
       active_user_id: activeUserId,
       total_picks: TOTAL_PICKS,
       picks_remaining: Math.max(0, TOTAL_PICKS - (session.current_pick - 1)),
+      pick_clock_seconds: pickClockSeconds,
+      pick_deadline_at: session.pick_deadline_at ?? null,
     });
   } catch (err) {
     return handleRouteError(err);

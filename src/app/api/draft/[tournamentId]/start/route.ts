@@ -1,6 +1,11 @@
 import { requireAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/db/client";
 import type { DraftSession, Tournament } from "@/lib/db/types";
+import {
+  DEFAULT_PICK_CLOCK_SECONDS,
+  nextPickDeadlineIso,
+  normalizePickClockSeconds,
+} from "@/lib/draft/pickAdvance";
 import { error, handleRouteError, json } from "@/lib/http";
 
 type Params = { params: Promise<{ tournamentId: string }> };
@@ -12,7 +17,10 @@ export async function POST(request: Request, { params }: Params) {
     const db = await getDb();
 
     const tournament = await db
-      .prepare("SELECT id, status FROM tournaments WHERE id = ?")
+      .prepare(
+        `SELECT id, status, pick_clock_seconds
+         FROM tournaments WHERE id = ?`,
+      )
       .bind(tournamentId)
       .first<Tournament>();
 
@@ -20,7 +28,8 @@ export async function POST(request: Request, { params }: Params) {
 
     const session = await db
       .prepare(
-        "SELECT tournament_id, current_pick, draft_status FROM draft_sessions WHERE tournament_id = ?",
+        `SELECT tournament_id, current_pick, draft_status, pick_deadline_at
+         FROM draft_sessions WHERE tournament_id = ?`,
       )
       .bind(tournamentId)
       .first<DraftSession>();
@@ -30,18 +39,31 @@ export async function POST(request: Request, { params }: Params) {
       return error("Draft already finished", 409);
     }
 
+    const pickClockSeconds = normalizePickClockSeconds(
+      tournament.pick_clock_seconds ?? DEFAULT_PICK_CLOCK_SECONDS,
+    );
+    const deadline = nextPickDeadlineIso(pickClockSeconds);
+
     await db.batch([
       db
         .prepare(
-          "UPDATE draft_sessions SET draft_status = 'LIVE', current_pick = COALESCE(current_pick, 1) WHERE tournament_id = ?",
+          `UPDATE draft_sessions
+           SET draft_status = 'LIVE', current_pick = COALESCE(current_pick, 1), pick_deadline_at = ?
+           WHERE tournament_id = ?`,
         )
-        .bind(tournamentId),
+        .bind(deadline, tournamentId),
       db
         .prepare("UPDATE tournaments SET status = 'DRAFTING' WHERE id = ?")
         .bind(tournamentId),
     ]);
 
-    return json({ ok: true, draft_status: "LIVE", tournament_status: "DRAFTING" });
+    return json({
+      ok: true,
+      draft_status: "LIVE",
+      tournament_status: "DRAFTING",
+      pick_deadline_at: deadline,
+      pick_clock_seconds: pickClockSeconds,
+    });
   } catch (err) {
     return handleRouteError(err);
   }

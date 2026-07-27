@@ -4,6 +4,10 @@ import type { GolfTournament, Tournament } from "@/lib/db/types";
 import { syncTournamentField } from "@/lib/golf/syncTournamentField";
 import { error, handleRouteError, json, readJson } from "@/lib/http";
 import {
+  DEFAULT_PICK_CLOCK_SECONDS,
+  normalizePickClockSeconds,
+} from "@/lib/draft/pickAdvance";
+import {
   resolvePartnershipTeams,
   validatePartnershipTeams,
   type PartnershipTeamInput,
@@ -31,6 +35,7 @@ interface CreateBody {
   name: string;
   draft_order?: string[];
   partnership_teams?: PartnershipTeamInput[];
+  pick_clock_seconds?: number;
   sync_field?: boolean;
 }
 
@@ -55,6 +60,9 @@ export async function POST(request: Request) {
     if (teamValidation) return error(teamValidation);
 
     const partnershipTeams = resolvePartnershipTeams(body.partnership_teams);
+    const pickClockSeconds = normalizePickClockSeconds(
+      body.pick_clock_seconds ?? DEFAULT_PICK_CLOCK_SECONDS,
+    );
 
     const tournId = body.external_tournament_id.trim();
     const year = body.year.trim();
@@ -107,10 +115,10 @@ export async function POST(request: Request) {
     const statements = [
       db
         .prepare(
-          `INSERT INTO tournaments (id, external_tournament_id, year, name, status)
-           VALUES (?, ?, ?, ?, 'SCHEDULED')`,
+          `INSERT INTO tournaments (id, external_tournament_id, year, name, status, pick_clock_seconds)
+           VALUES (?, ?, ?, ?, 'SCHEDULED', ?)`,
         )
-        .bind(id, tournId, year, body.name.trim()),
+        .bind(id, tournId, year, body.name.trim(), pickClockSeconds),
       db
         .prepare(
           `INSERT INTO draft_sessions (tournament_id, current_pick, draft_status)
@@ -132,7 +140,7 @@ export async function POST(request: Request) {
 
     const tournament = await db
       .prepare(
-        `SELECT id, external_tournament_id, year, name, status, created_at
+        `SELECT id, external_tournament_id, year, name, status, pick_clock_seconds, created_at
          FROM tournaments WHERE id = ?`,
       )
       .bind(id)

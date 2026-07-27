@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
 import type { AuthUser, DraftSession, GolfTournament, Tournament } from "@/lib/db/types";
+import { DEFAULT_PICK_CLOCK_SECONDS } from "@/lib/draft/pickAdvance";
 import { DEFAULT_PARTNERSHIP_TEAMS } from "@/lib/teams";
 
 const DEFAULT_ORDER = ["MinJungKyu", "PaulHawk", "PigTank", "Dylpickle"];
@@ -42,6 +43,7 @@ export default function AdminPage() {
   const [oregonMembers, setOregonMembers] = useState(
     DEFAULT_PARTNERSHIP_TEAMS[1].member_ids.join(", "),
   );
+  const [pickClockSeconds, setPickClockSeconds] = useState(String(DEFAULT_PICK_CLOCK_SECONDS));
 
   const [leagueTournaments, setLeagueTournaments] = useState<Tournament[]>([]);
   const [editId, setEditId] = useState("");
@@ -50,6 +52,7 @@ export default function AdminPage() {
   const [editOrder, setEditOrder] = useState("");
   const [editIdaho, setEditIdaho] = useState("");
   const [editOregon, setEditOregon] = useState("");
+  const [editPickClockSeconds, setEditPickClockSeconds] = useState(String(DEFAULT_PICK_CLOCK_SECONDS));
   const [editMessage, setEditMessage] = useState<string | null>(null);
 
   async function loadCachedSchedule(scheduleYear: string) {
@@ -96,6 +99,9 @@ export default function AdminPage() {
       detail.partnership_teams[1];
     setEditIdaho((idaho?.member_ids ?? []).join(", "));
     setEditOregon((oregon?.member_ids ?? []).join(", "));
+    setEditPickClockSeconds(
+      String(detail.tournament.pick_clock_seconds ?? DEFAULT_PICK_CLOCK_SECONDS),
+    );
   }
 
   async function syncSchedule() {
@@ -151,6 +157,7 @@ export default function AdminPage() {
           year,
           draft_order,
           partnership_teams,
+          pick_clock_seconds: Number(pickClockSeconds),
           sync_field: true,
         }),
       });
@@ -193,6 +200,7 @@ export default function AdminPage() {
                 .filter(Boolean),
             },
           ],
+          pick_clock_seconds: Number(editPickClockSeconds),
         }),
       });
       setEditDetail(detail);
@@ -297,6 +305,20 @@ export default function AdminPage() {
           />
         </label>
 
+        <label className="block space-y-1 text-sm">
+          <span className="font-medium">Pick clock (seconds)</span>
+          <input
+            required
+            type="number"
+            min={15}
+            max={600}
+            className="w-full border border-[var(--line)] bg-white px-3 py-2"
+            value={pickClockSeconds}
+            onChange={(e) => setPickClockSeconds(e.target.value)}
+          />
+          <span className="text-xs text-[var(--muted)]">15–600 seconds. Default 60.</span>
+        </label>
+
         <fieldset className="space-y-3 border border-[var(--line)] bg-[var(--surface)]/60 p-4">
           <legend className="px-1 text-sm font-medium">2v2 partnership teams</legend>
           <label className="block space-y-1 text-sm">
@@ -337,7 +359,8 @@ export default function AdminPage() {
       >
         <h2 className="font-semibold">3. Edit tournament settings</h2>
         <p className="text-sm text-[var(--muted)]">
-          Name, draft order, and Idaho/Oregon teams can be changed only while the draft is PENDING.
+          Name, draft order, pick clock, and Idaho/Oregon teams can be changed only while the draft
+          is PENDING.
         </p>
 
         <label className="block space-y-1 text-sm">
@@ -385,6 +408,20 @@ export default function AdminPage() {
                 className="w-full border border-[var(--line)] bg-white px-3 py-2 font-mono text-xs disabled:opacity-60"
                 value={editOrder}
                 onChange={(e) => setEditOrder(e.target.value)}
+              />
+            </label>
+
+            <label className="block space-y-1 text-sm">
+              <span className="font-medium">Pick clock (seconds)</span>
+              <input
+                required
+                type="number"
+                min={15}
+                max={600}
+                disabled={!canEdit || adminDisabled}
+                className="w-full border border-[var(--line)] bg-white px-3 py-2 disabled:opacity-60"
+                value={editPickClockSeconds}
+                onChange={(e) => setEditPickClockSeconds(e.target.value)}
               />
             </label>
 

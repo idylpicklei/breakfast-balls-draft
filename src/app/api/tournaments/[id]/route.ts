@@ -10,6 +10,9 @@ import type {
 } from "@/lib/db/types";
 import { error, handleRouteError, json, readJson } from "@/lib/http";
 import {
+  normalizePickClockSeconds,
+} from "@/lib/draft/pickAdvance";
+import {
   resolvePartnershipTeams,
   validatePartnershipTeams,
   type PartnershipTeamInput,
@@ -61,7 +64,7 @@ export async function GET(request: Request, { params }: Params) {
 
     const tournament = await db
       .prepare(
-        `SELECT id, external_tournament_id, year, name, status, created_at
+        `SELECT id, external_tournament_id, year, name, status, pick_clock_seconds, created_at
          FROM tournaments WHERE id = ?`,
       )
       .bind(id)
@@ -71,7 +74,7 @@ export async function GET(request: Request, { params }: Params) {
 
     const session = await db
       .prepare(
-        "SELECT tournament_id, current_pick, draft_status FROM draft_sessions WHERE tournament_id = ?",
+        "SELECT tournament_id, current_pick, draft_status, pick_deadline_at FROM draft_sessions WHERE tournament_id = ?",
       )
       .bind(id)
       .first<DraftSession>();
@@ -110,6 +113,7 @@ interface PatchBody {
   name?: string;
   draft_order?: string[];
   partnership_teams?: PartnershipTeamInput[];
+  pick_clock_seconds?: number;
 }
 
 export async function PATCH(request: Request, { params }: Params) {
@@ -121,7 +125,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
     const tournament = await db
       .prepare(
-        `SELECT id, external_tournament_id, year, name, status, created_at
+        `SELECT id, external_tournament_id, year, name, status, pick_clock_seconds, created_at
          FROM tournaments WHERE id = ?`,
       )
       .bind(id)
@@ -131,7 +135,7 @@ export async function PATCH(request: Request, { params }: Params) {
 
     const session = await db
       .prepare(
-        "SELECT tournament_id, current_pick, draft_status FROM draft_sessions WHERE tournament_id = ?",
+        "SELECT tournament_id, current_pick, draft_status, pick_deadline_at FROM draft_sessions WHERE tournament_id = ?",
       )
       .bind(id)
       .first<DraftSession>();
@@ -173,6 +177,14 @@ export async function PATCH(request: Request, { params }: Params) {
     if (nextName) {
       statements.push(
         db.prepare("UPDATE tournaments SET name = ? WHERE id = ?").bind(nextName, id),
+      );
+    }
+
+    if (body.pick_clock_seconds !== undefined) {
+      statements.push(
+        db
+          .prepare("UPDATE tournaments SET pick_clock_seconds = ? WHERE id = ?")
+          .bind(normalizePickClockSeconds(body.pick_clock_seconds), id),
       );
     }
 

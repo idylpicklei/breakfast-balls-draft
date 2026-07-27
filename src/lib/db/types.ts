@@ -13,6 +13,7 @@ export interface Tournament {
   year: string;
   name: string;
   status: TournamentStatus;
+  pick_clock_seconds?: number;
   created_at: string;
 }
 
@@ -37,6 +38,7 @@ export interface DraftSession {
   tournament_id: string;
   current_pick: number;
   draft_status: DraftStatus;
+  pick_deadline_at?: string | null;
 }
 
 export interface DraftOrder {

@@ -22,10 +22,35 @@ interface DraftPayload {
   active_user_id: string | null;
   total_picks: number;
   picks_remaining: number;
+  pick_clock_seconds?: number;
+  pick_deadline_at?: string | null;
+}
+
+interface AutoPickResult {
+  ok?: boolean;
+  skipped?: boolean;
+  auto_picked?: boolean;
+  player_name?: string;
+  user_id?: string;
 }
 
 const LIVE_POLL_MS = 2000;
 const PENDING_POLL_MS = 4000;
+
+function formatCountdown(deadlineIso: string | null | undefined): string | null {
+  if (!deadlineIso) return null;
+  const ms = Date.parse(deadlineIso) - Date.now();
+  if (ms <= 0) return "0:00";
+  const totalSeconds = Math.ceil(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function isDeadlineExpired(deadlineIso: string | null | undefined): boolean {
+  if (!deadlineIso) return false;
+  return Date.now() >= Date.parse(deadlineIso);
+}
 
 export default function DraftPage() {
   const params = useParams<{ id: string }>();
@@ -37,15 +62,38 @@ export default function DraftPage() {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [turnFlash, setTurnFlash] = useState(false);
+  const [clockLabel, setClockLabel] = useState<string | null>(null);
+  const [autoPickMessage, setAutoPickMessage] = useState<string | null>(null);
 
   const prevActiveRef = useRef<string | null>(null);
   const prevPickCountRef = useRef(0);
+  const autoPickInFlightRef = useRef(false);
 
   const refreshDraft = useCallback(async () => {
     const data = await apiFetch<DraftPayload>(`/api/draft/${tournamentId}`);
     setDraft(data);
     return data;
   }, [tournamentId]);
+
+  const triggerAutoPick = useCallback(async () => {
+    if (autoPickInFlightRef.current) return;
+    autoPickInFlightRef.current = true;
+    try {
+      const result = await apiFetch<AutoPickResult>("/api/draft/auto-pick", {
+        method: "POST",
+        body: JSON.stringify({ tournamentId }),
+      });
+      if (result.ok && result.auto_picked && result.player_name) {
+        setAutoPickMessage(`Auto-picked ${result.player_name}.`);
+        window.setTimeout(() => setAutoPickMessage(null), 4000);
+      }
+      await refreshDraft();
+    } catch {
+      // Next poll or timer tick will retry.
+    } finally {
+      autoPickInFlightRef.current = false;
+    }
+  }, [refreshDraft, tournamentId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +118,26 @@ export default function DraftPage() {
   }, [tournamentId]);
 
   const draftStatus = draft?.draft_session.draft_status ?? null;
+  const pickDeadline =
+    draft?.pick_deadline_at ?? draft?.draft_session.pick_deadline_at ?? null;
+
+  useEffect(() => {
+    if (draftStatus !== "LIVE" || !pickDeadline) {
+      setClockLabel(null);
+      return;
+    }
+
+    const update = () => {
+      setClockLabel(formatCountdown(pickDeadline));
+      if (isDeadlineExpired(pickDeadline)) {
+        void triggerAutoPick();
+      }
+    };
+
+    update();
+    const timer = window.setInterval(update, 250);
+    return () => window.clearInterval(timer);
+  }, [draftStatus, pickDeadline, triggerAutoPick]);
 
   // Poll while the draft room is open so other seats see picks / turn changes.
   useEffect(() => {
@@ -103,6 +171,15 @@ export default function DraftPage() {
         }
         prevPickCountRef.current = pickCount;
 
+        const deadline =
+          data.pick_deadline_at ?? data.draft_session.pick_deadline_at ?? null;
+        if (
+          data.draft_session.draft_status === "LIVE" &&
+          isDeadlineExpired(deadline)
+        ) {
+          void triggerAutoPick();
+        }
+
         if (
           data.draft_session.draft_status === "LIVE" &&
           data.active_user_id === myId &&
@@ -129,7 +206,7 @@ export default function DraftPage() {
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [draftStatus, me?.id, refreshDraft]);
+  }, [draftStatus, me?.id, refreshDraft, triggerAutoPick]);
 
   const isMyTurn =
     !!draft &&
@@ -199,6 +276,9 @@ export default function DraftPage() {
             Status: {draft_session.draft_status} · Pick{" "}
             {Math.min(draft_session.current_pick, draft.total_picks)} / {draft.total_picks}
             {active_user_id ? ` · On the clock: ${activeName}` : null}
+            {draft_session.draft_status === "LIVE" && clockLabel ? (
+              <span className="ml-2 font-mono text-[var(--ink)]">· {clockLabel}</span>
+            ) : null}
             {liveUpdating ? (
               <span className="ml-2 inline-flex items-center gap-1 text-xs text-[var(--accent)]">
                 <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
@@ -236,6 +316,9 @@ export default function DraftPage() {
       </div>
 
       {error && <p className="text-sm text-red-700">{error}</p>}
+      {autoPickMessage && (
+        <p className="text-sm font-medium text-[var(--accent)]">{autoPickMessage}</p>
+      )}
 
       <section className="grid gap-3 md:grid-cols-4">
         {draft_order.map((slot) => (
