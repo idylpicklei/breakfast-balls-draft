@@ -97,7 +97,7 @@ export default function DraftPage() {
           body: JSON.stringify({ tournamentId, reason }),
         });
         if (result.ok && result.auto_picked && result.player_name) {
-          const source = result.from_queue ? "from queue" : "best FedEx available";
+          const source = result.from_queue ? "from queue" : "best world ranking available";
           setAutoPickMessage(`Auto-picked ${result.player_name} (${source}).`);
           window.setTimeout(() => setAutoPickMessage(null), 4000);
         }
@@ -395,7 +395,7 @@ export default function DraftPage() {
           )}
           {isMyTurn && autodraftEnabled && (
             <p className="mt-2 text-sm font-semibold text-[var(--accent)]">
-              Autodraft is on — picking from your queue or best FedEx.
+              Autodraft is on — picking from your queue or best world ranking.
             </p>
           )}
         </div>

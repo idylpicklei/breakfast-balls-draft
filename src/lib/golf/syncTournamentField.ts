@@ -84,7 +84,7 @@ export async function syncTournamentField(
     await syncFedExRankings(year);
   } catch (err) {
     console.error(
-      `[syncTournamentField] FedEx ranking sync failed for ${year}:`,
+      `[syncTournamentField] World ranking sync failed for ${year}:`,
       err instanceof Error ? err.message : err,
     );
   }

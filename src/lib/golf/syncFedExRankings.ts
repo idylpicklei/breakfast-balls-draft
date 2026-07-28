@@ -3,11 +3,16 @@ import { rapidFetch } from "@/lib/golf/client";
 import type { StatsResponse, StatsRow } from "@/lib/golf/types";
 
 export const FEDEX_STAT_ID = "02671";
+export const WORLD_RANKING_STAT_ID = "186";
+
+/** Primary ranking used for draft sort / auto-pick (OWGR). */
+export const DRAFT_RANKING_STAT_ID = WORLD_RANKING_STAT_ID;
 
 export interface SyncFedExRankingsResult {
   year: string;
   rowsUpserted: number;
   syncedAt: string;
+  statId: string;
 }
 
 function parseRank(value: StatsRow["rank"]): number | null {
@@ -58,7 +63,7 @@ export function normalizeFedExStatsRows(rows: StatsRow[]): { playerId: string; r
 export async function syncFedExRankings(year: string): Promise<SyncFedExRankingsResult> {
   const data = await rapidFetch<StatsResponse>("/stats", {
     year,
-    statId: FEDEX_STAT_ID,
+    statId: DRAFT_RANKING_STAT_ID,
   });
 
   const normalized = normalizeFedExStatsRows(extractStatsRows(data));
@@ -66,8 +71,10 @@ export async function syncFedExRankings(year: string): Promise<SyncFedExRankings
   const syncedAt = new Date().toISOString();
 
   if (normalized.length === 0) {
-    console.warn(`[syncFedExRankings] No rows parsed for ${year} statId=${FEDEX_STAT_ID}`);
-    return { year, rowsUpserted: 0, syncedAt };
+    console.warn(
+      `[syncFedExRankings] No rows parsed for ${year} statId=${DRAFT_RANKING_STAT_ID}`,
+    );
+    return { year, rowsUpserted: 0, syncedAt, statId: DRAFT_RANKING_STAT_ID };
   }
 
   const known = await db
@@ -93,12 +100,13 @@ export async function syncFedExRankings(year: string): Promise<SyncFedExRankings
   }
 
   console.log(
-    `[syncFedExRankings] Cached ${ranked.length} FedEx ranks for ${year} (${normalized.length} from API)`,
+    `[syncFedExRankings] Cached ${ranked.length} world ranks for ${year} (statId=${DRAFT_RANKING_STAT_ID}, ${normalized.length} from API)`,
   );
 
   return {
     year,
     rowsUpserted: ranked.length,
     syncedAt,
+    statId: DRAFT_RANKING_STAT_ID,
   };
 }
